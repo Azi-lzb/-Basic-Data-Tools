@@ -1,0 +1,684 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基础数据审核工具</title>
+<style>
+:root{
+  --bg:#f2f5f9;
+  --surface:#ffffff;
+  --surface-2:#f8fafc;
+  --border:#e4e9f0;
+  --border-strong:#d3dce6;
+  --text:#15202e;
+  --text-2:#5b6b7c;
+  --text-3:#98a6b5;
+  --accent:#1667e0;
+  --accent-hover:#1150b8;
+  --accent-soft:#eaf2ff;
+  --accent-ring:rgba(22,103,224,.18);
+  --success:#0d9e62;
+  --success-soft:#e6f7ef;
+  --warn:#d9820b;
+  --warn-soft:#fff4e0;
+  --danger:#d9453d;
+  --danger-soft:#fdeceb;
+  --header-top:#0c1626;
+  --header-bottom:#17263e;
+  --shadow-card:0 1px 2px rgba(16,24,40,.05),0 12px 32px -20px rgba(16,24,40,.22);
+  --radius:16px;
+  --radius-sm:10px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 "Segoe UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:none}
+input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- 顶部栏 ---------- */
+.topbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px 12px 22px;background:linear-gradient(120deg,var(--header-top),var(--header-bottom));color:#fff;box-shadow:0 1px 0 rgba(255,255,255,.06) inset;-webkit-app-region:drag;user-select:none}
+.topbar button,.topbar .win-btn{-webkit-app-region:no-drag}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand-title{font-size:15px;font-weight:700;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand-icon{position:relative;width:38px;height:38px;flex:none;display:grid;place-items:center}
+.brand-icon::after{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 9px);z-index:60;white-space:nowrap;background:#0c1626;color:#e8f0fb;font-size:12px;line-height:1.5;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.16);box-shadow:0 6px 18px rgba(0,0,0,.28);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,visibility .15s}
+.brand-icon:hover::after{opacity:1;visibility:visible}
+.brand-icon img{width:36px;height:36px;object-fit:contain;display:block}
+.topbar-right{display:flex;align-items:center;gap:10px;-webkit-app-region:no-drag}
+.win-controls{display:flex;align-items:center;margin-left:2px}
+.win-btn{width:34px;height:34px;display:grid;place-items:center;background:transparent;border:none;border-radius:8px;color:#cbd5e1;cursor:pointer;margin-top:3px}
+.win-btn:hover{background:rgba(255,255,255,.12);color:#fff}
+.win-close:hover{background:#e81123;color:#fff}
+.win-btn svg{width:15px;height:15px}
+
+/* ---------- 按钮 ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);padding:9px 14px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s,border-color .15s,color .15s,box-shadow .15s,transform .05s;user-select:none;white-space:nowrap;position:relative}
+.btn svg{width:16px;height:16px;flex:none}
+.btn:hover{background:var(--surface-2);border-color:var(--border-strong);color:var(--text)}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--accent-ring);outline-offset:2px}
+.btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 1px 2px rgba(22,103,224,.35)}
+.btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff}
+.btn.ghost{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16);color:#dce8f7}
+.btn.ghost:hover{background:rgba(255,255,255,.14);color:#fff}
+.btn.soft{background:var(--accent-soft);border-color:#d5e5ff;color:var(--accent)}
+.btn.soft:hover{background:#dbe8ff;border-color:#c4dbff;color:var(--accent-hover)}
+.btn.tiny{padding:5px 10px;font-size:12px;border-radius:8px}
+.btn.tiny svg{width:14px;height:14px}
+.btn.sm{padding:6px 11px;font-size:12.5px;border-radius:9px}
+.btn.micro{padding:3px 9px;font-size:11px;border-radius:7px}
+.spin{display:inline-block;width:13px;height:13px;flex:none;border:2px solid rgba(128,128,128,.35);border-top-color:currentColor;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- 主布局：上排两栏，下排整行文件列表 ---------- */
+.layout{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:16px;padding:18px 22px;align-items:stretch}
+/* 待审核文件 + 机构说明文件：同一行并排，左 2/3、右 1/3 */
+.files-wrap{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;min-height:0}
+/* 无机构说明文件时：只显示待审核文件，占满整行 */
+.files-wrap.only-files{grid-template-columns:minmax(0,1fr)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:18px;min-width:0;display:flex;flex-direction:column}
+
+/* ---------- 通用字段 ---------- */
+.field{margin-bottom:16px}
+.field-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+.field-head.tight{justify-content:flex-start;gap:10px;align-items:baseline}
+.pin-btn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--text-3);cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.pin-btn svg{width:14px;height:14px}
+.pin-btn:hover{background:var(--surface-2);border-color:var(--border);color:var(--text)}
+.pin-btn.on{color:var(--accent)}
+.pin-btn.on svg{fill:currentColor}
+.pin-btn.on:hover{color:var(--accent-hover);border-color:#c4dbff;background:var(--accent-soft)}
+.pin-btn:disabled{opacity:.55;cursor:not-allowed}
+label{display:block;font-size:13px;font-weight:600;color:var(--text)}
+.input-group{display:flex;gap:8px;align-items:center}
+.input-group .btn{height:34px;padding:0 12px}
+input{box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font:inherit;color:var(--text);background:var(--surface-2);transition:border-color .15s,box-shadow .15s,background .15s}
+input:hover{background:#fff;border-color:#b8c5d3}
+input:focus{background:#fff;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
+input::placeholder{color:var(--text-3)}
+select{box-sizing:border-box;width:100%;padding:9px 34px 9px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font:inherit;color:var(--text);background:var(--surface-2);cursor:pointer}
+select:hover{background:#fff;border-color:#b8c5d3}
+select:focus{background:#fff;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
+select:disabled{opacity:.6;cursor:not-allowed}
+.path-name{flex:1;min-width:0;display:flex;align-items:center;padding:0 11px;min-height:34px;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.path-name.empty{min-height:0;padding:6px 10px;color:var(--text-3);border-style:dashed}
+.path-link{display:inline-flex;align-items:center;gap:6px;max-width:100%;color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(22,103,224,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.path-link:hover{color:var(--accent-hover);border-bottom-color:var(--accent-hover);text-decoration:underline}
+.engine-detail{display:block;margin-top:6px;color:var(--text-3);font-size:11.5px;line-height:1.55}
+.engine-detail.warn{color:var(--warn)}
+
+/* ---------- 上排卡片 + 待审核文件（整行） ---------- */
+.panel-left{overflow:hidden}
+.tips{margin-top:6px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
+.tips-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.tips h2{margin:0;font-size:12px;font-weight:600;color:var(--text-2)}
+.tips .guide-btn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--text-3);cursor:pointer;font-size:14px;line-height:1;transition:background .15s,color .15s,border-color .15s}
+.tips .guide-btn:hover{background:var(--surface);border-color:var(--border);color:var(--text)}
+.tips ol{margin:0;padding:0 0 0 18px}
+.tips li{font-size:11.5px;line-height:1.7;color:var(--text-3);margin-bottom:5px}
+.tips li:last-child{margin-bottom:0}
+.file-panel{min-height:240px;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:14px 18px 18px}
+.file-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.file-title{font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px}
+.count-pill{display:none;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px}
+.file-actions{display:inline-flex;gap:6px}
+.mixed{display:none;margin-bottom:10px;padding:9px 12px;border-radius:var(--radius-sm);background:var(--warn-soft);border:1px solid #f2d9a7;color:#8a5a0a;font-size:12.5px;line-height:1.6}
+.file-list{flex:1;min-height:150px;overflow:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-content:start;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);padding:10px}
+.file-row{display:grid;grid-template-columns:18px 22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;cursor:pointer;border:1px solid var(--border);border-radius:10px;background:var(--surface);transition:background .12s,box-shadow .12s}
+.file-row:hover{background:var(--accent-soft);box-shadow:0 1px 3px rgba(16,24,40,.08)}
+.file-row.checked{background:#f5f9ff}
+.file-check{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;margin:0}
+.file-doc{display:grid;place-items:center;color:var(--text-3)}
+.file-doc svg{width:16px;height:16px}
+.file-main{min-width:0;display:flex;flex-direction:column;gap:1px}
+.file-name{font-size:12.8px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-meta{font-size:11.5px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;background:var(--success-soft);color:var(--success)}
+.file-tag.warn{background:var(--warn-soft);color:var(--warn)}
+.empty{grid-column:1/-1;min-height:140px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;color:var(--text-3);text-align:center;padding:20px}
+.empty-icon{width:42px;height:42px;border-radius:12px;background:var(--border);color:var(--text-3);display:grid;place-items:center;opacity:.75}
+.empty-icon svg{width:22px;height:22px}
+.empty p{margin:0;font-size:12.5px}
+/* ---------- 机构说明文件：与待审核文件并列的独立卡片，非 xlsx 附件提醒 ---------- */
+.explanation-panel{min-height:0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:14px 18px 18px}
+.explanation-list{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-content:start;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);padding:10px}
+.explanation-row{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);cursor:pointer;transition:background .12s,border-color .12s}
+.explanation-row:hover{background:var(--accent-soft);border-color:var(--accent-ring)}
+.explanation-ico{display:grid;place-items:center;color:var(--warn)}
+.explanation-ico svg{width:16px;height:16px}
+.explanation-name{font-size:12.8px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.explanation-row:hover .explanation-name{color:var(--accent)}
+.explanation-folder{font-size:11px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.explanation-empty{grid-column:1/-1;display:flex;align-items:center;justify-content:center;min-height:70px;color:var(--text-3);font-size:12.5px;margin:0}
+
+/* ---------- 右侧：四个字段 ---------- */
+.panel-right{overflow:auto}
+.panel-right .field{margin-bottom:15px}
+.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px;align-items:start}
+/* ---------- 右侧：自定义按钮（平铺按钮） ---------- */
+.custom-field{margin-top:2px}
+.custom-list{display:flex;flex-direction:column;gap:8px}
+.custom-item{display:flex;align-items:baseline;justify-content:space-between;gap:10px;text-align:left;width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);cursor:pointer;font:inherit;transition:background .15s,border-color .15s,color .15s}
+.custom-item:hover{background:var(--accent-soft);border-color:var(--accent-ring)}
+.custom-item:focus-visible{outline:2px solid var(--accent-ring);outline-offset:2px}
+.custom-item:disabled{opacity:.55;cursor:not-allowed}
+.custom-name{font-size:13px;font-weight:600}
+.custom-remark{font-size:11.5px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.custom-hint{font-size:11.5px;color:var(--text-3);line-height:1.7;margin:10px 0 0}
+.custom-empty{font-size:12px;color:var(--text-3);margin:0;line-height:1.7}
+/* ---------- 技术用自定义按钮：右键“打开配置”→“自定义功能”触发，最多四个，2×2 矩阵占满卡片底部 ---------- */
+.tech-list{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;margin-top:2px}
+/* ---------- 自定义按钮确认弹窗 ---------- */
+.confirm-mask{display:none;position:fixed;inset:0;z-index:50;background:rgba(12,22,38,.45);align-items:center;justify-content:center}
+.confirm-card{width:340px;max-width:calc(100vw - 48px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:20px 22px}
+.confirm-title{margin:0 0 8px;font-size:15px;font-weight:700;color:var(--text)}
+.confirm-msg{margin:0 0 18px;font-size:13px;color:var(--text-2);line-height:1.7}
+.confirm-actions{display:flex;justify-content:flex-end;gap:10px}
+.reset-menu{display:none;position:fixed;z-index:80;min-width:118px;background:var(--surface);border:1px solid var(--border-strong);border-radius:9px;box-shadow:0 8px 22px rgba(16,24,40,.18);padding:4px}
+.reset-menu .item{display:block;width:100%;padding:8px 12px;border:0;border-radius:6px;background:transparent;color:var(--text);font:inherit;font-size:12.5px;text-align:left;cursor:pointer;white-space:nowrap}
+.reset-menu .item:hover{background:var(--accent-soft);color:var(--accent)}
+.reset-menu .item:focus-visible{outline:2px solid var(--accent-ring);outline-offset:-2px}
+
+/* ---------- 底部：操作 + 状态 + 运行记录 ---------- */
+.console{flex:none;background:var(--surface);border-top:1px solid var(--border);padding:14px 22px 16px;box-shadow:0 -10px 28px -22px rgba(16,24,40,.28)}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.recursive-toggle{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:400;color:var(--text-3);cursor:pointer;user-select:none;padding:0 2px}
+.recursive-toggle input[type=checkbox]{width:14px;height:14px;margin:0;padding:0;accent-color:var(--accent);cursor:pointer}
+.recursive-toggle:disabled{opacity:.55;cursor:not-allowed}
+.recursive-toggle input[type=checkbox]:disabled{cursor:not-allowed}
+.status{margin-left:auto;display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);font-size:12.5px;max-width:55%;min-width:0}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#a6b3c2;flex:none}
+.status.working .status-dot{background:var(--accent);animation:pulse 1.1s ease-in-out infinite}
+.status.success{background:var(--success-soft);border-color:#bfe5d2;color:var(--success)}
+.status.success .status-dot{background:var(--success)}
+.status.error{background:var(--danger-soft);border-color:#f2c6c3;color:var(--danger)}
+.status.error .status-dot{background:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+#statusText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log-head{display:flex;align-items:center;justify-content:space-between;margin:12px 0 7px}
+.log-head>span{font-size:12.5px;font-weight:600;color:var(--text-2)}
+.log{box-sizing:border-box;width:100%;height:164px;resize:none;overflow:auto;background:#0b1120;color:#cbd5e1;border:1px solid #1f2b41;border-radius:12px;padding:12px 14px;font:12px/1.7 Consolas,"Cascadia Code","Microsoft YaHei",monospace;user-select:text}
+/* ---------- 进度条：运行记录 与 黑框 之间，按任务事件衰减推进 ---------- */
+.progress{display:flex;align-items:center;gap:10px;margin:0 0 8px}
+.progress[hidden]{display:none}
+.progress-track{flex:1;height:6px;border-radius:999px;background:var(--border);overflow:hidden}
+.progress-fill{height:100%;width:0%;border-radius:999px;background:var(--accent);transition:width .45s ease;position:relative;overflow:hidden}
+.progress-fill.working::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.4),rgba(255,255,255,0));animation:shimmer 1.4s ease-in-out infinite}
+.progress-fill.success{background:var(--success)}
+.progress-fill.error{background:var(--danger)}
+.progress-pct{flex:none;font-size:11px;color:var(--text-3);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+@media(max-width:1000px){
+  body{overflow:auto}
+  .layout{grid-template-columns:1fr;grid-template-rows:auto auto auto;overflow:visible}
+  .files-wrap{grid-template-columns:1fr}
+  .field-grid{grid-template-columns:1fr}
+  .file-list{grid-template-columns:1fr;min-height:180px;max-height:260px}
+  .status{max-width:100%;margin-left:0;flex-basis:100%;justify-content:flex-start}
+  .topbar{padding:12px 16px}
+  .layout{padding:14px 16px}
+  .console{padding:12px 16px 14px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar" id="titlebar">
+  <div class="brand">
+    <div class="brand-icon" data-tip="Supported by HZPBC"><img src="data:image/png;base64,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" alt=""></div>
+    <div>
+      <div class="brand-title">基础数据审核工具</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="btn ghost" id="openConfigBtn" onclick="openConfig()" oncontextmenu="showResetMenu(event)" title="打开 data/config.xlsx 快速查看区域映射、执行流程等配置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>打开配置</button>
+    <div class="win-controls">
+      <button class="win-btn" onclick="winMin()" title="最小化" aria-label="最小化"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button class="win-btn" id="winMaxBtn" onclick="winMax()" title="最大化" aria-label="最大化"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+      <button class="win-btn win-close" onclick="winClose()" title="关闭" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<div class="reset-menu" id="resetMenu">
+  <button type="button" class="item" onclick="toggleTechButtons()">自定义功能</button>
+  <button type="button" class="item" id="logModeMenuBtn" onclick="toggleLogMode()">日志：全量</button>
+  <button type="button" class="item" onclick="askResetConfig()">重置配置</button>
+</div>
+
+<main class="layout">
+
+  <!-- 左侧：源数据目录 -->
+  <section class="card panel-left">
+    <div class="field">
+      <div class="field-head">
+        <label for="input">源数据目录</label>
+      </div>
+      <div class="input-group">
+        <div class="path-name empty" id="inputName">未选择</div>
+        <button class="btn" onclick="pick('input','folder')" title="选择源数据目录">选择</button>
+      </div>
+    </div>
+    <div class="tips">
+      <div class="tips-head">
+        <h2>使用提示</h2>
+        <button class="guide-btn" onclick="openGuide()" title="打开使用说明" aria-label="打开使用说明">📕</button>
+      </div>
+      <ol>
+        <li>选择源数据目录；机构文件在子文件夹时，勾选“递归子文件夹”。</li>
+        <li>核对自动识别的模板；需要时手动更换模板或选择外部文件。</li>
+        <li>点击“汇总核查表校验”生成审核副本和本期审核结果；点击“汇总校验结果说明”汇总机构报送说明。</li>
+        <li>输出目录默认跟随源数据目录；点书钉后可固定为指定位置。</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 右侧：模板 / 匹配 / 输出 / 外部 -->
+  <section class="card panel-right">
+    <div class="field-grid">
+      <div class="field">
+        <div class="field-head">
+          <label for="templateDir">模板文件目录</label>
+        </div>
+        <div class="input-group">
+          <div class="path-name empty" id="templateDirName">未选择</div>
+          <button class="btn" onclick="pick('templateDir','folder')" title="选择模板文件目录">选择</button>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-head">
+          <label for="output">输出目录</label>
+          <button class="pin-btn" id="outputPin" onclick="toggleOutputPin()" title="固定输出目录" aria-label="固定输出目录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg></button>
+        </div>
+        <div class="input-group">
+          <div class="path-name empty" id="outputName">未选择</div>
+          <button class="btn" onclick="pick('output','folder')" title="修改输出目录">修改</button>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-head tight">
+          <label for="template">匹配模板</label>
+          <button class="btn soft micro" onclick="recognize()" title="识别源数据目录中的模板">自动识别模板</button>
+        </div>
+        <div class="input-group">
+          <div class="path-name empty" id="templateName">未选择</div>
+          <button class="btn" onclick="pick('template','file')" title="更换匹配模板">更换</button>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-head">
+          <label for="external">外部文件（可选）</label>
+        </div>
+        <div class="input-group">
+          <div class="path-name empty" id="externalName">未选择</div>
+          <button class="btn" onclick="pick('external','file')" title="选择外部文件">选择</button>
+        </div>
+      </div>
+      <!-- 技术用自定义按钮：右键“打开配置”→“自定义功能”展示，最多两个 -->
+      <div class="tech-list" id="techButtons" style="display:none"></div>
+    </div>
+    <div class="field custom-field" style="display:none">
+      <div class="field-head">
+        <label>自定义按钮</label>
+        <button class="btn tiny" id="reloadCustom" onclick="loadCustom()" title="重新读取 config.xlsx 的“自定义按钮”页">刷新</button>
+      </div>
+      <div id="customList" class="custom-list"></div>
+      <p class="custom-hint">功能清单读取自 <code>config.xlsx</code> 的“自定义按钮”页，可在 Excel 中增删条目后点“刷新”。</p>
+    </div>
+  </section>
+
+  <!-- 待审核文件（左 2/3）+ 机构说明文件（右 1/3）：同一行并排 -->
+  <div class="files-wrap">
+  <div class="file-panel">
+    <div class="file-head">
+      <span class="file-title">待审核文件 <span class="count-pill" id="fileCount"></span></span>
+      <span class="file-actions">
+        <button class="btn tiny" onclick="selectAll(true)">全选</button>
+        <button class="btn tiny" onclick="selectAll(false)">取消</button>
+        <button class="btn tiny" onclick="recognize()" title="重新扫描源数据目录，刷新待审核文件清单">刷新</button>
+        <label class="recursive-toggle" title="勾选时递归查找所选源目录下所有子文件夹的 .xlsx，未勾选时只读取目录第一层"><input type="checkbox" id="recursive" onchange="setRecursive(this.checked)">递归子文件夹</label>
+      </span>
+    </div>
+    <div class="mixed" id="mixed"></div>
+    <div class="file-list" id="fileList">
+      <div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5 4 8l-1 9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2l-1-9-1.5-3z"/></svg></div><p>选择源数据目录后，自动列出待审核文件</p></div>
+    </div>
+  </div>
+
+  <div class="explanation-panel" id="explanation">
+    <div class="file-head">
+      <span class="file-title">机构说明文件 <span class="count-pill" id="explanationCount"></span></span>
+    </div>
+    <div class="explanation-list" id="explanationList"></div>
+  </div>
+  </div><!-- /files-wrap -->
+
+</main>
+
+<div class="confirm-mask" id="confirmMask" onclick="confirmRun(false)">
+  <div class="confirm-card" onclick="event.stopPropagation()">
+    <p class="confirm-title" id="confirmTitle">自定义按钮</p>
+    <p class="confirm-msg" id="confirmMsg"></p>
+    <div class="confirm-actions">
+      <button class="btn" id="confirmCancel" onclick="confirmRun(false)">取消</button>
+      <button class="btn primary" id="confirmOk" onclick="confirmRun(true)">执行</button>
+    </div>
+  </div>
+</div>
+
+<footer class="console">
+  <div class="actions">
+    <button class="btn primary" data-action="audit" onclick="startFlow('汇总核查表校验','audit')" title="内置模板体检与文件匹配，复制公式、重算并生成审核副本与问题汇总">汇总核查表校验</button>
+    <button class="btn" data-action="summary" onclick="startFlow('汇总校验结果说明','summary')" title="按“执行流程”的“汇总校验结果说明”流程执行区域汇总">汇总校验结果说明</button>
+    <div class="status" id="status"><span class="status-dot"></span><span id="statusText">正在加载…</span></div>
+  </div>
+  <div class="log-head">
+    <span>运行记录</span>
+    <button class="btn tiny" id="copyLog" onclick="copyLog()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span id="copyLabel">复制全部</span></button>
+  </div>
+  <div class="progress" id="progress" hidden>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <span class="progress-pct" id="progressPct"></span>
+  </div>
+  <textarea class="log" id="log" readonly spellcheck="false"></textarea>
+</footer>
+
+<script>
+const fields=['input','templateDir','template','external','output'];
+let state={},lastAction='';
+/* ---------- 进度条：按任务（日志事件）衰减推进，不区分实际运行时间 ----------
+   decay    每收到一个事件，剩余缺口缩小到 decay 倍（越小前期涨得越快）
+   holdMs   完成后 100% 停留时长
+   maxPct   busy 期间允许达到的上限，完成时才补到 100%            */
+const PROGRESS={decay:.80,holdMs:1400,maxPct:99.5};
+let run=null,runTimer=null,prevLogTail='';
+let logFull=localStorage.getItem('logFull')==='1';
+function countNew(arr,prevTail){ /* 日志条目是 {text,detail} 对象，JSON 往返后引用会变，须按 text 值比较 */
+  if(!arr.length)return 0;
+  if(!prevTail)return arr.length;
+  const last=arr[arr.length-1].text;
+  if(last===prevTail)return 0;
+  let i=arr.length-1;
+  while(i>=0&&arr[i].text!==prevTail)i--;
+  return arr.length-1-i;
+}
+function setProgress(pct,cls){
+  const el=document.getElementById('progress'),fill=document.getElementById('progressFill'),p=document.getElementById('progressPct');
+  if(!el)return;
+  el.hidden=false;
+  fill.className='progress-fill'+cls;
+  fill.style.width=Math.round(pct)+'%';
+  p.textContent=Math.round(pct)+'%';
+}
+function hideProgress(){
+  const el=document.getElementById('progress'),fill=document.getElementById('progressFill'),p=document.getElementById('progressPct');
+  if(!el)return;
+  el.hidden=true;fill.style.width='0%';p.textContent='';
+}
+function applyProgress(s){
+  const arr=s.log||[],busy=!!s.busy;
+  if(busy){
+    if(!run||run.done){clearTimeout(runTimer);run={n:0}}
+    run.n+=countNew(arr,prevLogTail);
+    const pct=Math.min(PROGRESS.maxPct,100*(1-Math.pow(PROGRESS.decay,run.n)));
+    setProgress(pct,' working');
+  }else if(run){
+    if(!run.done){ /* 本次运行结束：补满后淡出，只挂一次计时器 */
+      run.done=true;
+      /* 成功文案里常含“失败 X 个文件”，须先判成功词再判失败词，否则会把正常完成误标红 */
+      const st=s.status||'';
+      const err=/失败|异常|错误/.test(st) && !/完成|通过|共汇总|已生成|就绪/.test(st);
+      setProgress(100,err?' error':' success');
+      runTimer=setTimeout(()=>{run=null;hideProgress()},PROGRESS.holdMs);
+    }
+  }
+  prevLogTail=arr.length?arr[arr.length-1].text:prevLogTail;
+}
+const ICON={
+  file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+  doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>',
+  inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5 4 8l-1 9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2l-1-9-1.5-3z"/></svg>'
+};
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function shortName(p){p=String(p==null?'':p).replace(/[\\/]+$/,'');const i=Math.max(p.lastIndexOf('\\'),p.lastIndexOf('/'));return i>=0?p.slice(i+1):p}
+function values(){let o={};fields.forEach(x=>o[x]=state[x]||'');return o}
+async function sync(){await pywebview.api.update(values())}
+async function pick(f,t){
+  await sync();
+  let v=t==='folder'?await pywebview.api.choose_folder(f):await pywebview.api.choose_file(f);
+  if(v){
+    state[f]=v;
+    const o=values();
+    if(f==='input')delete o.output;   // 修改源数据目录时不要推送输出目录，由后端保持跟随/图钉状态
+    await pywebview.api.update(o);
+  }
+  await refresh();
+}
+function winMin(){if(window.pywebview)pywebview.api.win_minimize()}
+function winMax(){
+  if(!window.pywebview)return;
+  const btn=document.getElementById('winMaxBtn'),isMax=btn&&btn.dataset.max==='1';
+  pywebview.api.win_maximize(!!isMax);
+  if(btn){btn.dataset.max=isMax?'':'1';btn.title=isMax?'最大化':'还原'}
+}
+function winClose(){if(window.pywebview)pywebview.api.win_close()}
+document.getElementById('titlebar').addEventListener('dblclick',e=>{if(!e.target.closest('button'))winMax()});
+async function recognize(){await sync();await pywebview.api.recognize();await refresh()}
+async function setRecursive(checked){await pywebview.api.update({recursive:checked})}
+async function toggleOutputPin(){const v=!state.outputPinned;await pywebview.api.update({outputPinned:v});await refresh()}
+async function openConfig(){await pywebview.api.open_config();await refresh()}
+async function openPath(p){await pywebview.api.open_path(p);await refresh()}
+async function openGuide(){await pywebview.api.open_user_guide()}
+let customFeatures=[],pendingConfirm=null;
+async function loadCustom(){customFeatures=await pywebview.api.get_custom_features()||[];renderCustom(customFeatures);renderTechButtons()}
+/* 技术用入口：右键“打开配置”→“自定义功能”，最多展示四个自定义按钮 */
+function renderTechButtons(){
+  const box=document.getElementById('techButtons');
+  if(!box)return;
+  const items=customFeatures.slice(0,4);
+  if(!items.length){box.style.display='none';box.innerHTML='';return}
+  box.innerHTML=items.map(f=>{
+    const tip=f.remark?esc(f.remark):esc(f.name);
+    return '<button type="button" class="custom-item" onclick="askRun(\''+esc(f.id)+'\')" title="'+tip+'">'
+      +'<span class="custom-name">'+esc(f.name)+'</span></button>';
+  }).join('');
+}
+function toggleTechButtons(){
+  const box=document.getElementById('techButtons');
+  if(!box)return;
+  const show=box.style.display==='none'||!box.style.display;
+  box.style.display=show?'grid':'none';
+  if(show){renderTechButtons();loadCustom()}
+}
+function renderCustom(features){
+  const box=document.getElementById('customList');
+  if(!features.length){box.innerHTML='<p class="custom-empty">暂无显示在界面的自定义按钮，可在 config.xlsx 的“自定义按钮”页中添加</p>';return}
+  box.innerHTML=features.map(f=>{
+    const tip=f.remark?esc(f.remark):esc(f.name);
+    return '<button type="button" class="custom-item" onclick="askRun(\''+esc(f.id)+'\')" title="'+tip+'">'
+      +'<span class="custom-name">'+esc(f.name)+'</span>'
+      +(f.remark?'<span class="custom-remark">'+esc(f.remark)+'</span>':'')+'</button>';
+  }).join('');
+}
+function askRun(id){
+  const f=customFeatures.find(x=>x.id===id)||{};
+  pendingConfirm={type:'custom',id};
+  document.getElementById('confirmTitle').textContent='自定义按钮';
+  document.getElementById('confirmOk').textContent='执行';
+  document.getElementById('confirmMsg').textContent='是否执行「'+(f.name||id)+'」？';
+  document.getElementById('confirmMask').style.display='flex';
+}
+function confirmRun(ok){
+  document.getElementById('confirmMask').style.display='none';
+  if(!ok||!pendingConfirm)return;
+  const c=pendingConfirm;pendingConfirm=null;
+  if(c.type==='reset'){doResetConfig();}
+  else{runCustom(c.id);}
+}
+async function runCustom(id){await pywebview.api.run_custom(id);await refresh()}
+function askResetConfig(){
+  pendingConfirm={type:'reset'};
+  document.getElementById('confirmTitle').textContent='重置配置';
+  document.getElementById('confirmOk').textContent='重置';
+  document.getElementById('confirmMsg').textContent='将重置模块化功能和执行流程；历史审核结果、自定义按钮不会修改。是否继续？';
+  document.getElementById('confirmMask').style.display='flex';
+}
+async function doResetConfig(){
+  try{
+    await pywebview.api.reset_config();
+  }catch(e){
+    const msg=(e&&e.message)?e.message:String(e);
+    alert('重置配置失败：'+msg);
+  }
+  await refresh();
+}
+function showResetMenu(e){
+  e.preventDefault();
+  e.stopPropagation();
+  const menu=document.getElementById('resetMenu'),btn=document.getElementById('openConfigBtn');
+  if(!menu||!btn)return;
+  const r=btn.getBoundingClientRect();
+  menu.style.display='block';
+  menu.style.left=Math.max(8,r.right-menu.offsetWidth)+'px';
+  menu.style.top=(r.bottom+6)+'px';
+  const mr=menu.getBoundingClientRect();
+  if(mr.bottom>innerHeight-4){menu.style.top=Math.max(8,r.top-menu.offsetHeight-6)+'px';}
+}
+function hideResetMenu(){
+  const menu=document.getElementById('resetMenu');
+  if(menu)menu.style.display='none';
+}
+document.addEventListener('click',()=>hideResetMenu());
+document.addEventListener('contextmenu',e=>{if(!e.target||!e.target.closest('#openConfigBtn'))hideResetMenu()});
+window.addEventListener('scroll',hideResetMenu,true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')hideResetMenu()});
+function checkedPaths(){return [...document.querySelectorAll('.file-check:checked')].map(x=>x.value)}
+async function sendSelection(){await pywebview.api.set_selected_files(checkedPaths())}
+async function selectAll(checked){document.querySelectorAll('.file-check').forEach(x=>x.checked=checked);await sendSelection();await refresh()}
+// Win7 兼容：主按钮一次调用同步表单、勾选文件并启动，避免 pywebview 5 连续多次调用卡住
+async function start(a){lastAction=a;await pywebview.api.start_with_state(a,values(),checkedPaths());await refresh()}
+async function startFlow(flow,action){lastAction=action;await pywebview.api.start_flow_with_state(flow,values(),checkedPaths());await refresh()}
+async function copyLog(){const log=document.getElementById('log');log.select();try{await navigator.clipboard.writeText(log.value)}catch(e){document.execCommand('copy')}const b=document.getElementById('copyLabel');b.textContent='已复制';setTimeout(()=>b.textContent='复制全部',1200)}
+function renderLog(){
+  const el=document.getElementById('log'),atBottom=el.scrollTop+el.clientHeight>=el.scrollHeight-8;
+  const entries=(state.log||[]).slice();
+  const shown=logFull?entries:entries.filter(e=>!e.detail);
+  el.value=shown.map(e=>e.text).join('\n\n');
+  const btn=document.getElementById('logModeMenuBtn');
+  if(btn)btn.textContent=logFull?'日志：简单':'日志：全量';
+  if(atBottom)el.scrollTop=el.scrollHeight;
+}
+function toggleLogMode(){logFull=!logFull;try{localStorage.setItem('logFull',logFull?'1':'0')}catch(e){}renderLog()}
+function renderFiles(s){
+  const list=document.getElementById('fileList'),files=s.sourceFiles||[];
+  const selected=new Set(s.selectedFiles||[]);
+  const count=document.getElementById('fileCount');
+  if(files.length){count.style.display='inline-flex';count.textContent='已选 '+selected.size+' / '+files.length}
+  else{count.style.display='none';count.textContent=''}
+  const mixed=document.getElementById('mixed'),types=s.mixedTemplates||[];
+  if(types.length>1){mixed.style.display='block';mixed.innerHTML='<b>发现 '+types.length+' 类报表：</b>'+esc(types.join('、'))+'。一次审核只应保留同一类型文件，请取消勾选其他类型。'}
+  else mixed.style.display='none';
+  if(!files.length){list.innerHTML='<div class="empty"><div class="empty-icon">'+ICON.inbox+'</div><p>选择源数据目录后，自动列出待审核文件</p></div>';return}
+  list.innerHTML=files.map(f=>{
+    const isSel=selected.has(f.path),matched=f.template!=='未识别';
+    return '<label class="file-row'+(isSel?' checked':'')+'" title="'+esc(f.path)+'">'
+      +'<input class="file-check" type="checkbox" value="'+esc(f.path)+'"'+(isSel?' checked':'')+' onchange="sendSelection()">'
+      +'<span class="file-doc">'+ICON.file+'</span>'
+      +'<span class="file-main"><span class="file-name">'+esc(f.name)+'</span>'
+      +'<span class="file-meta">'+(matched?esc(f.template):'未匹配到模板')+'</span></span>'
+      +'<span class="file-tag'+(matched?'':' warn')+'">'+(matched?'已匹配':'未识别')+'</span>'
+      +'</label>';
+  }).join('');
+}
+function renderExplanation(s){
+  const box=document.getElementById('explanationList'),count=document.getElementById('explanationCount');
+  if(!box)return;
+  const files=s.explanationFiles||[];
+  // 无机构说明文件时隐藏右侧卡片，待审核文件占满整行
+  const panel=document.getElementById('explanation');
+  if(panel)panel.style.display=files.length?'flex':'none';
+  const wrap=document.querySelector('.files-wrap');
+  if(wrap)wrap.classList.toggle('only-files',!files.length);
+  count.style.display=files.length?'inline-flex':'none';
+  count.textContent=files.length||'';
+  if(!files.length){
+    box.innerHTML='';
+    return;
+  }
+  const base=String(s.input||'').replace(/[\\/]+$/,'');
+  box.innerHTML=files.map(f=>{
+    const full=f.path||'';
+    let folder='';
+    if(base&&full.startsWith(base)){
+      const rel=full.slice(base.length).replace(/^[\\/]+/,'');
+      const idx=Math.max(rel.lastIndexOf('\\'),rel.lastIndexOf('/'));
+      folder=idx>0?rel.slice(0,idx):'';
+    }
+    return '<div class="explanation-row" data-path="'+esc(full)+'" title="'+esc(full)+'">'
+      +'<span class="explanation-ico">'+ICON.doc+'</span>'
+      +'<span class="explanation-name">'+esc(f.name)+'</span>'
+      +'<span class="explanation-folder">'+esc(folder)+'</span>'
+      +'</div>';
+  }).join('');
+}
+async function refresh(){
+  let s=await pywebview.api.get_state();state=s;
+  fields.forEach(x=>{
+    const box=document.getElementById(x+'Name'),full=s[x]||'';
+    if(!box)return;
+    box.classList.toggle('empty',!full);
+    box.innerHTML='';
+    if(full){
+      const a=document.createElement('a');
+      a.className='path-link';
+      a.href='javascript:void(0)';
+      a.onclick=function(){openPath(full)};
+      a.textContent=shortName(full);
+      a.title=full;
+      box.appendChild(a);
+    }else{
+      box.textContent='未选择';
+    }
+  });
+  const statusEl=document.getElementById('status');
+  statusEl.classList.remove('working','success','error');
+  if(s.busy)statusEl.classList.add('working');
+  else if(/就绪|完成|通过|已生成|共汇总/.test(s.status))statusEl.classList.add('success');
+  else if(/失败|异常|错误/.test(s.status))statusEl.classList.add('error');
+  const st=document.getElementById('statusText');st.textContent=s.status;st.title=s.status;
+  const recEl=document.getElementById('recursive');
+  if(recEl){recEl.checked=!!s.recursive;recEl.disabled=!!s.busy}
+  const pinEl=document.getElementById('outputPin');
+  if(pinEl){
+    const on=!!s.outputPinned;
+    pinEl.classList.toggle('on',on);
+    pinEl.title=on?'跟随源数据目录':'固定输出目录';
+    pinEl.setAttribute('aria-label',pinEl.title);
+    pinEl.disabled=!!s.busy;
+  }
+  renderLog();
+  applyProgress(s);
+  renderFiles(s);
+  renderExplanation(s);
+  document.querySelectorAll('button').forEach(b=>{if(b.id!=='copyLog'&&b.id!=='logModeMenuBtn')b.disabled=s.busy});
+  document.querySelectorAll('[data-action]').forEach(b=>{
+    const spin=b.querySelector('.spin');
+    if(s.busy&&b.dataset.action===lastAction){if(!spin){const el=document.createElement('span');el.className='spin';b.insertBefore(el,b.firstChild)}}
+    else if(spin)spin.remove();
+  });
+}
+window.addEventListener('pywebviewready',()=>{refresh();loadCustom()});
+document.getElementById('explanationList').addEventListener('click',e=>{
+  const row=e.target&&e.target.closest('.explanation-row');
+  if(row&&row.dataset.path)openPath(row.dataset.path);
+});
+setInterval(()=>{if(window.pywebview)refresh()},800);
+</script>
+</body>
+</html>

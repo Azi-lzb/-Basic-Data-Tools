@@ -1,0 +1,4 @@
+pywin32>=306
+openpyxl>=3.1
+xlrd>=2.0
+pywebview>=6.2,<7

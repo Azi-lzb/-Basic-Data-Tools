@@ -1,0 +1,26 @@
+# 真实业务数据（报送文件、校验结果、模板、历史库）—— 不得推入公开仓库
+2026-07-31/
+reference/
+
+# 运行数据与历史
+data/
+chatHistory/
+
+# 打包产物
+build/
+dist/
+*.log
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# 系统 / 编辑器
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/

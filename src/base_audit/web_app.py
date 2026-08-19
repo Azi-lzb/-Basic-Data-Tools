@@ -1,0 +1,502 @@
+from __future__ import annotations
+
+import threading
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from .discovery import (
+    classify_source_files,
+    detect_period,
+    explanation_files,
+    recommend_template,
+)
+from .history import organize_history_rule_numbers
+from .name_config import initialize_config, reset_default_configuration
+from .service import AuditService
+from .settings import SettingsStore
+
+
+class WebApi:
+    def __init__(self, project_root: Path) -> None:
+        self.project_root = project_root
+        self.settings_store = SettingsStore(project_root / "data" / "用户设置.json")
+        self.settings = self.settings_store.load()
+        bundled_templates = project_root / "templates"
+        formal_templates = project_root / "2026-07-31" / "模板文件"
+        saved_input = self.settings.last_input_dir
+        saved_output = self.settings.last_output_dir
+        self.state: dict[str, Any] = {
+            "busy": False,
+            "status": "就绪",
+            "log": [],
+            "input": saved_input,
+            "templateDir": self.settings.last_template_dir or str(
+                bundled_templates if bundled_templates.is_dir() else formal_templates
+            ),
+            "template": "",
+            "templateManual": False,
+            "external": self.settings.last_external_file,
+            "output": saved_output,
+            "outputAuto": not self.settings.output_pinned,
+            "outputPinned": self.settings.output_pinned,
+            "recursive": self.settings.recursive_folders,
+            "sourceFiles": [],
+            "selectedFiles": [],
+            "mixedTemplates": [],
+            "explanationFiles": [],
+        }
+
+    def get_state(self) -> dict[str, Any]:
+        return self.state
+
+    def initialize_config(self) -> dict[str, Any]:
+        """Restore default mappings and migrate the history sheet name if needed."""
+        path = initialize_config(self.project_root / "data" / "config.xlsx")
+        self._log(f"已初始化配置：{path}（历史审核结果内容未改动）")
+        self.state["status"] = "配置已初始化"
+        return self.state
+
+    def reset_config(self) -> dict[str, Any]:
+        """Reset executable defaults without touching history or custom buttons."""
+        path = reset_default_configuration(self.project_root / "data" / "config.xlsx")
+        self._log(f"已重置模块化功能和执行流程：{path}（历史审核结果、自定义按钮未改动）")
+        self.state["status"] = "配置已重置"
+        return self.state
+
+    def organize_history_rule_numbers(self) -> dict[str, Any]:
+        """Reassign colliding history-rule serials without running an audit."""
+        result = organize_history_rule_numbers(
+            self.project_root / "data" / "config.xlsx"
+        )
+        self.state["status"] = "历史规则编号已整理"
+        self._log(result.summary_text())
+        return self.state
+
+    def open_config(self) -> dict[str, Any]:
+        """Open data/config.xlsx with the default app for quick review."""
+        import os
+        path = self.project_root / "data" / "config.xlsx"
+        if not path.is_file():
+            self.state["status"] = "配置文件不存在"
+            self._log(f"未找到配置文件：{path}")
+            return self.state
+        try:
+            os.startfile(path)
+        except Exception as exc:
+            self.state["status"] = "无法打开配置文件"
+            self._log(f"打开配置文件失败：{exc}")
+            return self.state
+        self._log(f"已打开配置文件：{path}")
+        return self.state
+
+    def open_user_guide(self) -> dict[str, Any]:
+        """Open the adjacent Word user guide with the default application."""
+        import os
+        path = self.project_root / "基础数据审核工具使用说明.docx"
+        if not path.is_file():
+            self.state["status"] = "使用说明不存在"
+            self._log(f"未找到使用说明：{path}")
+            return self.state
+        try:
+            os.startfile(path)
+        except Exception as exc:
+            self.state["status"] = "无法打开使用说明"
+            self._log(f"打开使用说明失败：{exc}")
+            return self.state
+        self._log(f"已打开使用说明：{path}")
+        return self.state
+
+    def open_path(self, path: str) -> dict[str, Any]:
+        """Open a local directory or file with the system default application."""
+        import os
+        target = Path(path)
+        if not target.exists():
+            self.state["status"] = "路径不存在"
+            self._log(f"未找到路径：{path}")
+            return self.state
+        try:
+            os.startfile(target)
+        except Exception as exc:
+            self.state["status"] = "无法打开路径"
+            self._log(f"打开路径失败：{exc}")
+            return self.state
+        self._log(f"已打开：{path}")
+        return self.state
+
+    def _load_custom_features(self) -> list[dict[str, Any]]:
+        """Read flat custom entries from config.xlsx's "自定义功能" sheet."""
+        from openpyxl import load_workbook
+        path = self.project_root / "data" / "config.xlsx"
+        if not path.is_file():
+            return []
+        try:
+            workbook = load_workbook(path, read_only=True, data_only=True)
+        except Exception as exc:
+            self._log(f"读取自定义功能配置失败：{exc}")
+            return []
+        try:
+            if "自定义按钮" not in workbook.sheetnames:
+                return []
+            rows = workbook["自定义按钮"].iter_rows(values_only=True)
+            header = [str(value).strip() if value is not None else "" for value in next(rows, ())]
+            try:
+                name_index = header.index("按钮名称")
+                flow_index = header.index("流程名称")
+                show_index = header.index("是否显示")
+                remark_index = header.index("备注")
+            except ValueError:
+                self._log("config.xlsx 的“自定义按钮”缺少必要列：按钮名称、流程名称、是否显示、备注")
+                return []
+
+            def cell(row: tuple[object, ...], index: int) -> str:
+                return str(row[index]).strip() if index < len(row) and row[index] is not None else ""
+
+            features: list[dict[str, Any]] = []
+            for row in rows:
+                feature_name = cell(row, name_index)
+                flow_name = cell(row, flow_index)
+                if not feature_name:
+                    continue
+                features.append({
+                    "id": feature_name,
+                    "name": feature_name,
+                    "flow": flow_name,
+                    "shown": cell(row, show_index).casefold() in {"是", "y", "yes", "true", "1"},
+                    "remark": cell(row, remark_index),
+                })
+            return features
+        finally:
+            workbook.close()
+
+    def get_custom_features(self) -> list[dict[str, Any]]:
+        """Visible flat custom features for the workbench."""
+        return [
+            {"id": item["id"], "name": item["name"], "flow": item["flow"], "remark": item["remark"]}
+            for item in self._load_custom_features()
+            if item["shown"]
+        ]
+
+    def run_custom(self, feature_name: str) -> dict[str, Any]:
+        """Resolve a flat custom entry. Flow dispatch is implemented separately."""
+        if self.state["busy"]:
+            return self.state
+        feature = next(
+            (item for item in self._load_custom_features() if item["id"] == feature_name),
+            None,
+        )
+        if feature is None:
+            self._log(f"未找到自定义功能：{feature_name}")
+            return self.state
+        if not feature["flow"]:
+            self._log(f"自定义功能“{feature['name']}”未填写流程名称。")
+            self.state["status"] = "缺少流程名称"
+            return self.state
+        # 自定义按钮触发的流程走宽松校验（strict=False）：组合前置缺失时只警告不报错。
+        self.start_flow(feature["flow"], strict=False)
+        return self.state
+
+    def start_flow(self, flow_name: str, strict: bool = True) -> bool:
+        """Start one config.xlsx execution flow by its displayed name."""
+        name = str(flow_name).strip()
+        if not name:
+            self._log("执行流程名称不能为空")
+            return False
+        return self.start("flow:" + name, strict=strict)
+
+    def start_with_state(
+        self,
+        action: str,
+        values: dict[str, Any] | None = None,
+        selected_files: list[str] | None = None,
+        strict: bool = True,
+    ) -> bool:
+        """Synchronize form values and launch an action in one WebView call.
+
+        This is intentionally a single API boundary for the Python 3.7 /
+        pywebview 5 compatibility package.  Older WebView bridges may stall
+        when the front end sends ``update`` → ``set_selected_files`` →
+        ``start`` as three immediate calls.
+        """
+        if values:
+            self.update(values)
+        if selected_files is not None:
+            self.set_selected_files(selected_files)
+        return self.start(action, strict=strict)
+
+    def start_flow_with_state(
+        self,
+        flow_name: str,
+        values: dict[str, Any] | None = None,
+        selected_files: list[str] | None = None,
+        strict: bool = True,
+    ) -> bool:
+        """Single-call variant of :meth:`start_flow` for legacy WebView."""
+        name = str(flow_name).strip()
+        if not name:
+            self._log("执行流程名称不能为空")
+            return False
+        return self.start_with_state("flow:" + name, values, selected_files, strict=strict)
+
+    def choose_folder(self, field: str) -> str:
+        import webview
+        current = self.state.get(field) or self.project_root
+        # pywebview 5 (used by the Python 3.7 Win7 package) exposes integer
+        # dialog constants; pywebview 6 uses the FileDialog enum.
+        file_dialog = getattr(webview, "FileDialog", None)
+        folder_dialog = (
+            getattr(file_dialog, "FOLDER", None)
+            if file_dialog is not None
+            else getattr(webview, "FOLDER_DIALOG")
+        )
+        selected = webview.windows[0].create_file_dialog(
+            folder_dialog, directory=str(current)
+        )
+        value = str(selected[0]) if selected else ""
+        if value:
+            previous = self.state.get(field, "")
+            self.state[field] = value
+            if field == "templateDir" and value != previous:
+                self.state["templateManual"] = False
+            if field in {"input", "templateDir"}:
+                if field == "input" and not self.state["outputPinned"]:
+                    self.state["output"] = str(Path(value) / "审核结果")
+                    self.state["outputAuto"] = True
+                # 仅通过选择源数据目录触发一次模板推荐；选择模板目录只刷新文件清单。
+                # 用户手动选定模板后，仍以手动选择为准。
+                self._recognize(allow_template_auto=(field == "input"))
+            elif field == "output":
+                self.state["outputAuto"] = False
+                self.state["outputPinned"] = True
+        return value
+
+    def choose_file(self, field: str) -> str:
+        import webview
+        current = self.state.get(field) or self.project_root
+        file_dialog = getattr(webview, "FileDialog", None)
+        open_dialog = (
+            getattr(file_dialog, "OPEN", None)
+            if file_dialog is not None
+            else getattr(webview, "OPEN_DIALOG")
+        )
+        selected = webview.windows[0].create_file_dialog(
+            open_dialog,
+            directory=str(Path(current).parent if Path(current).is_file() else current),
+            file_types=("Excel 文件 (*.xlsx;*.xls)",),
+        )
+        value = str(selected[0]) if selected else ""
+        if value:
+            self.state[field] = value
+            if field == "template":
+                self.state["templateManual"] = True
+        return value
+
+    def update(self, values: dict[str, Any]) -> dict[str, Any]:
+        for key in ("input", "templateDir", "template", "external", "output"):
+            if key in values:
+                new_value = str(values[key]).strip()
+                previous = self.state.get(key, "")
+                if key == "output" and new_value != self.state.get("output", ""):
+                    self.state["outputAuto"] = False
+                    self.state["outputPinned"] = True
+                self.state[key] = new_value
+                if key == "template" and new_value and new_value != previous:
+                    self.state["templateManual"] = True
+                elif key == "templateDir" and new_value != previous:
+                    self.state["templateManual"] = False
+        if "outputPinned" in values:
+            value = values["outputPinned"]
+            pinned = (
+                value if isinstance(value, bool)
+                else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
+            )
+            self.state["outputPinned"] = pinned
+            self.state["outputAuto"] = not pinned
+            if not pinned and self.state["input"]:
+                self.state["output"] = str(Path(self.state["input"]) / "审核结果")
+        if "recursive" in values:
+            value = values["recursive"]
+            recursive = (
+                value if isinstance(value, bool)
+                else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
+            )
+            changed = recursive != self.state["recursive"]
+            self.state["recursive"] = recursive
+            if changed:
+                # 复选框直接决定待审核清单的扫描范围；不触发模板自动改写。
+                self._recognize(allow_template_auto=False)
+        return self.state
+
+    def recognize(self) -> dict[str, Any]:
+        self._recognize(force_template=True)
+        return self.state
+
+    def set_selected_files(self, paths: list[str]) -> dict[str, Any]:
+        allowed = {item["path"] for item in self.state.get("sourceFiles", [])}
+        self.state["selectedFiles"] = [path for path in paths if path in allowed]
+        return self.state
+
+    def start(self, action: str, strict: bool = True) -> bool:
+        if self.state["busy"]:
+            return False
+        self.state["busy"] = True
+        self.state["status"] = "正在处理，请勿关闭窗口……"
+        # Python 3.7 is used by the Win7 package; str.removeprefix arrived in
+        # Python 3.9, so use slicing here instead.
+        display = action[len("flow:"):] if action.startswith("flow:") else action
+        action_name = {"check": "审核前检查", "audit": "汇总核查表校验", "summary": "汇总校验结果说明"}.get(display, display)
+        self._log(f"开始执行：{action_name}")
+        threading.Thread(target=self._worker, args=(action, strict), daemon=True).start()
+        return True
+
+    def _recognize(
+        self,
+        *,
+        force_template: bool = False,
+        allow_template_auto: bool = False,
+    ) -> None:
+        input_dir = Path(self.state["input"]) if self.state["input"] else None
+        template_dir = Path(self.state["templateDir"]) if self.state["templateDir"] else None
+        if input_dir and input_dir.is_dir():
+            period = detect_period(input_dir, recursive=bool(self.state["recursive"]))
+            self.state["detectedPeriod"] = period.period
+            self.state["explanationFiles"] = [
+                {"path": str(path), "name": path.name}
+                for path in explanation_files(
+                    input_dir, recursive=bool(self.state["recursive"])
+                )
+            ]
+            if not self.state["outputPinned"]:
+                self.state["output"] = str(input_dir / "审核结果")
+                self.state["outputAuto"] = True
+        elif self.state.get("explanationFiles"):
+            self.state["explanationFiles"] = []
+        if input_dir and template_dir and input_dir.is_dir() and template_dir.is_dir():
+            files = classify_source_files(
+                template_dir, input_dir, self.project_root / "data" / "模板索引.json",
+                recursive=bool(self.state["recursive"]),
+            )
+            self.state["sourceFiles"] = files
+            current = set(self.state.get("selectedFiles") or [])
+            available = {item["path"] for item in files}
+            self.state["selectedFiles"] = (
+                [item["path"] for item in files]
+                if not current else [path for path in current if path in available]
+            )
+            templates = sorted({item["template"] for item in files if item["template"] != "未识别"})
+            self.state["mixedTemplates"] = templates
+            # 自动匹配只能由两处触发：用户点击“自动识别模板”，或选择源数据目录。
+            # 执行流程、刷新目录、选择模板目录等场景只更新清单，不得改写模板选择。
+            should_recommend = force_template or (
+                allow_template_auto and not self.state.get("templateManual")
+            )
+            if should_recommend:
+                result = recommend_template(
+                    template_dir, input_dir, self.project_root / "data" / "模板索引.json",
+                    recursive=bool(self.state["recursive"]),
+                )
+                if result.template_path:
+                    self.state["template"] = str(result.template_path)
+                    self.state["templateManual"] = False
+                self._log(result.details)
+            if len(templates) > 1:
+                self._log("发现多种报表：" + "、".join(templates) + "。建议取消勾选不属于本次审核类型的文件。")
+
+    def _worker(self, action: str, strict: bool = True) -> None:
+        started = time.monotonic()
+        try:
+            # 执行前仅刷新待处理文件、数据期等状态，不重新匹配或改写模板。
+            self._log("正在刷新待审核文件清单……")
+            self._recognize(allow_template_auto=False)
+            self._log(
+                f"待处理文件：{len(self.state.get('selectedFiles', []))} 个；"
+                "正在读取执行流程……"
+            )
+            self._save_settings()
+            service = AuditService(config_path=self.project_root / "data" / "config.xlsx")
+            output = Path(self.state["output"])
+            selected = [Path(path) for path in self.state.get("selectedFiles", [])]
+            if action in {"check", "audit"} and not selected:
+                raise ValueError("请至少勾选一个待审核文件")
+            if action == "check":
+                result = service.preflight(template_path=Path(self.state["template"]), input_dir=Path(self.state["input"]), output_dir=output, selected_files=selected, external_path=Path(self.state["external"]) if self.state["external"] else None, recursive=bool(self.state["recursive"]), on_step=self._log_detail)
+            else:
+                if action == "audit":
+                    action = "flow:汇总核查表校验"
+                if action.startswith("flow:"):
+                    flow_name = action[len("flow:"):]
+                else:
+                    flow_name = "汇总校验结果说明"
+                self._log(f"当前流程：{flow_name}；模板：{Path(self.state['template']).name}")
+                self._log("正在启动流程处理引擎……", detail=True)
+                result = service.run_flow(
+                    flow_name=flow_name, template_path=Path(self.state["template"]),
+                    input_dir=Path(self.state["input"]), output_dir=output,
+                    period=self.state.get("detectedPeriod") or Path(self.state["input"]).name,
+                    history_path=self.project_root / "data" / "config.xlsx", selected_files=selected,
+                    external_path=Path(self.state["external"]) if self.state["external"] else None,
+                    recursive=bool(self.state["recursive"]), on_step=self._log_detail, strict=strict,
+                )
+            self.state["status"] = result.summary_text().splitlines()[0]
+            self._log(result.summary_text())
+        except Exception as exc:
+            self.state["status"] = "执行失败"
+            self._log("执行失败：" + str(exc))
+        finally:
+            elapsed = time.monotonic() - started
+            self._log(f"任务结束，本次耗时：{elapsed:.1f} 秒")
+            self.state["busy"] = False
+
+    def win_minimize(self) -> None:
+        """自绘标题栏的窗口控制：最小化。"""
+        import webview
+        if webview.windows:
+            webview.windows[0].minimize()
+
+    def win_maximize(self, restore: bool = False) -> None:
+        """自绘标题栏的窗口控制：最大化 / 还原。restore=True 时还原。"""
+        import webview
+        if not webview.windows:
+            return
+        window = webview.windows[0]
+        if restore:
+            window.restore()
+        else:
+            window.maximize()
+
+    def win_close(self) -> None:
+        """自绘标题栏的窗口控制：关闭窗口。"""
+        import webview
+        if webview.windows:
+            webview.windows[0].destroy()
+
+    def _log(self, text: str, detail: bool = False) -> None:
+        """记录一条运行日志。detail=False 为面向用户的简明结果，detail=True
+        为逐功能/逐文件的调试细节，前端“简单”模式会过滤掉 detail 条目。"""
+        stamp = datetime.now().strftime("%H:%M:%S")
+        entry = {"text": f"[{stamp}] {text}", "detail": bool(detail)}
+        self.state["log"] = (self.state["log"] + [entry])[-100:]
+
+    def _log_detail(self, text: str) -> None:
+        self._log(text, detail=True)
+
+    def _save_settings(self) -> None:
+        self.settings.last_input_dir = self.state["input"]
+        self.settings.last_template_dir = self.state["templateDir"]
+        self.settings.last_external_file = self.state["external"]
+        self.settings.last_output_dir = self.state["output"]
+        self.settings.output_pinned = bool(self.state["outputPinned"])
+        self.settings.recursive_folders = bool(self.state["recursive"])
+        self.settings_store.save(self.settings)
+
+
+def launch_web(project_root: Path) -> None:
+    import webview
+    bundle_root = Path(getattr(sys, "_MEIPASS", project_root))
+    html = bundle_root / "web" / "index.html" if getattr(sys, "frozen", False) else project_root / "src" / "base_audit" / "web" / "index.html"
+    if not html.is_file():
+        raise RuntimeError("本地界面文件缺失")
+    webview.create_window("基础数据审核工具", html.as_uri(), js_api=WebApi(project_root), width=1180, height=820, min_size=(900, 650), frameless=True)
+    webview.start(gui="edgechromium")
