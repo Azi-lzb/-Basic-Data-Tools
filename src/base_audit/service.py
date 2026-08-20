@@ -224,7 +224,7 @@ class AuditService:
         self,
         *,
         flow_name: str,
-        template_path: Path,
+        template_path: Path | None,
         input_dir: Path,
         output_dir: Path,
         period: str,
@@ -244,7 +244,10 @@ class AuditService:
         steps = load_flow_steps(self.config_path, flow_name)
         if not steps:
             raise ValueError(f"执行流程“{flow_name}”不存在，或没有启用的功能")
-        mappings = {item.name: item for item in load_feature_mappings(self.config_path, template_path)}
+        # “合并同机构多表”不使用模板；给配置读取一个占位文件名只是为了
+        # 沿用模块化功能的加载逻辑，不会打开或访问该路径。
+        mapping_template = template_path or Path("__无需模板__.xlsx")
+        mappings = {item.name: item for item in load_feature_mappings(self.config_path, mapping_template)}
         missing = [step.feature_name for step in steps if step.feature_name not in mappings]
         if missing:
             raise ValueError("执行流程引用了“模块化功能”中不存在的功能：" + "、".join(missing))
@@ -273,6 +276,10 @@ class AuditService:
         executable_types = feature_types - {NAMED_RANGE_CHECK_FUNCTION}
         if MERGE_ORG_FILES_FUNCTION in executable_types and executable_types != {MERGE_ORG_FILES_FUNCTION}:
             raise ValueError("“合并同机构多表”必须单独成一个流程，不能与其他功能混用")
+        if executable_types != {MERGE_ORG_FILES_FUNCTION} and (
+            template_path is None or not template_path.is_file()
+        ):
+            raise FileNotFoundError("该执行流程需要选择有效的模板文件")
         summary_types = {
             USED_RANGE_SUMMARY_FUNCTION,
             FIXED_ROW_SUMMARY_FUNCTION,

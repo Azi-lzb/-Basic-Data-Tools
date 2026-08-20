@@ -429,14 +429,19 @@ class WebApi:
                     flow_name = action[len("flow:"):]
                 else:
                     flow_name = "汇总校验结果说明"
-                self._log(f"当前流程：{flow_name}；模板：{Path(self.state['template']).name}")
+                merge_org_flow = flow_name == "合并同机构多表"
+                if merge_org_flow:
+                    self._log(f"当前流程：{flow_name}；仅使用源数据目录")
+                else:
+                    self._log(f"当前流程：{flow_name}；模板：{Path(self.state['template']).name}")
                 self._log("正在启动流程处理引擎……", detail=True)
                 result = service.run_flow(
-                    flow_name=flow_name, template_path=Path(self.state["template"]),
+                    flow_name=flow_name,
+                    template_path=None if merge_org_flow else Path(self.state["template"]),
                     input_dir=Path(self.state["input"]), output_dir=output,
-                    period=self.state.get("detectedPeriod") or Path(self.state["input"]).name,
+                    period="" if merge_org_flow else (self.state.get("detectedPeriod") or Path(self.state["input"]).name),
                     history_path=self.project_root / "data" / "config.xlsx", selected_files=selected,
-                    external_path=Path(self.state["external"]) if self.state["external"] else None,
+                    external_path=None if merge_org_flow else (Path(self.state["external"]) if self.state["external"] else None),
                     recursive=bool(self.state["recursive"]), on_step=self._log_detail, strict=strict,
                 )
             self.state["status"] = result.summary_text().splitlines()[0]
