@@ -112,37 +112,34 @@ def _output_folder(input_dir: Path, output_dir: Path, output_name: str) -> Path:
     return output_resolved / f"{output_name}_{batch_id}"
 
 
-def _copy_sheet_with_fallback(source_sheet: object, target_workbook: object) -> tuple[object, bool]:
-    """Copy a sheet, falling back to UsedRange for restrictive COM engines.
+def _copy_sheet_contents(source_sheet: object, target_workbook: object) -> object:
+    """Create a destination sheet and copy the source's actual used range.
 
-    Some Excel/WPS COM builds reject Worksheet.Copy across workbooks although
-    both workbooks belong to the same application instance.  Range.Copy keeps
-    the data, formulas, cell formatting and merged cells required for making
-    the later audit template; it intentionally does not promise charts or
-    workbook-level names, which must be rebuilt on the merged workbook anyway.
+    ``Worksheet.Copy`` is unreliable in some Excel COM installations: it can
+    silently create a separate workbook even when ``After`` is supplied.  The
+    explicit new-sheet + Range.Copy route keeps values, formulas, formatting,
+    merged cells and column widths in the intended workbook.  Charts and
+    workbook-level names are intentionally not carried over because the
+    merged workbook is a new template-preparation artifact.
     """
     target_sheet = target_workbook.Worksheets(target_workbook.Worksheets.Count)
-    try:
-        source_sheet.Copy(After=target_sheet)
-        return target_workbook.Worksheets(target_workbook.Worksheets.Count), False
-    except Exception:
-        copied = target_workbook.Worksheets.Add(After=target_sheet)
-        used = source_sheet.UsedRange
-        used.Copy(copied.Cells(used.Row, used.Column))
-        # Range.Copy does not retain column widths.  Restrict the work to the
-        # actual used columns rather than iterating the full worksheet.
-        first_column = int(used.Column)
-        last_column = first_column + int(used.Columns.Count) - 1
-        for column in range(first_column, last_column + 1):
-            try:
-                copied.Columns(column).ColumnWidth = source_sheet.Columns(column).ColumnWidth
-            except Exception:
-                pass
+    copied = target_workbook.Worksheets.Add(After=target_sheet)
+    used = source_sheet.UsedRange
+    used.Copy(copied.Cells(used.Row, used.Column))
+    # Range.Copy does not retain column widths.  Restrict the work to the
+    # actual used columns rather than iterating the full worksheet.
+    first_column = int(used.Column)
+    last_column = first_column + int(used.Columns.Count) - 1
+    for column in range(first_column, last_column + 1):
         try:
-            copied.Visible = source_sheet.Visible
+            copied.Columns(column).ColumnWidth = source_sheet.Columns(column).ColumnWidth
         except Exception:
             pass
-        return copied, True
+    try:
+        copied.Visible = source_sheet.Visible
+    except Exception:
+        pass
+    return copied
 
 
 def run_merge_org(
@@ -210,9 +207,7 @@ def run_merge_org(
                         for index in range(1, source_book.Worksheets.Count + 1):
                             source_sheet = source_book.Worksheets(index)
                             try:
-                                copied, used_range_fallback = _copy_sheet_with_fallback(
-                                    source_sheet, merged
-                                )
+                                copied = _copy_sheet_contents(source_sheet, merged)
                             except Exception as exc:
                                 raise RuntimeError(
                                     f"复制“{source_path.name}”中的工作表“{source_sheet.Name}”失败：{exc}"
@@ -220,11 +215,6 @@ def run_merge_org(
                             copied.Name = _safe_sheet_name(
                                 f"{report_type}_{source_sheet.Name}", existing
                             )
-                            if used_range_fallback and on_step is not None:
-                                on_step(
-                                    f"提示：{source_path.name}｜{source_sheet.Name} 不支持整表复制，"
-                                    "已按实际使用区域复制"
-                                )
                             source_sheet_count += 1
                     finally:
                         if source_book is not None:
