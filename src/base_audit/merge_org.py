@@ -192,11 +192,15 @@ def run_merge_org(
                     on_step(f"正在合并：{organisation}（{len(files)} 个文件）")
                 merged = excel.excel.Workbooks.Add()
                 # Excel's user setting may create several blank sheets.  Keep
-                # exactly one placeholder while copying, then delete it before
-                # SaveAs so the merged workbook contains source sheets only.
+                # one *visible* cover sheet permanently: some COM engines
+                # reject deleting/moving sheets if copied source sheets are
+                # hidden.  It also makes the merged workbook self-explanatory.
                 while merged.Worksheets.Count > 1:
                     merged.Worksheets(merged.Worksheets.Count).Delete()
                 placeholder = merged.Worksheets(1)
+                placeholder.Name = "合并说明"
+                placeholder.Visible = -1
+                placeholder.Cells(1, 1).Value = "本工作簿由“合并同机构多表”自动生成。请在此文件上重新定义命名区域并制作审核模板。"
                 existing: set[str] = set()
                 for source_path in sorted(files):
                     source_book = None
@@ -225,21 +229,6 @@ def run_merge_org(
                     finally:
                         if source_book is not None:
                             excel.close_workbook(source_book)
-                # 源文件可能全部是隐藏/超隐藏工作表。Excel 不允许删除最后
-                # 一张可视表；这种情况下强制显示第一张已复制表，用户如确有
-                # 需要可在合并文件中再隐藏它。
-                copied_sheets = [merged.Worksheets(i) for i in range(2, merged.Worksheets.Count + 1)]
-                has_visible_sheet = any(
-                    int(sheet.Visible) == -1 for sheet in copied_sheets
-                )
-                if not has_visible_sheet and copied_sheets:
-                    copied_sheets[0].Visible = -1
-                    if on_step is not None:
-                        on_step(
-                            f"提示：机构“{organisation}”的来源工作表均为隐藏状态，"
-                            "已将第一张合并工作表设为可视，避免 Excel 拒绝保存"
-                        )
-                placeholder.Delete()
                 merged.SaveAs(str(out_path), FileFormat=51)
                 items.append(MergeOrgItem(
                     organisation, out_path, tuple(files), source_sheet_count, "成功",
