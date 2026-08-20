@@ -14,6 +14,7 @@ a = Analysis(
         # an optional UI entry path cannot leave the single-file EXE incomplete.
         "base_audit.excel_com",
         "base_audit.service",
+        "base_audit.merge_org",
         "base_audit.web_app",
         "base_audit.region_summary",
         "pythoncom",

@@ -18,6 +18,7 @@ from .name_config import (
     FORMULA_COPY_FUNCTION,
     ISSUE_EXTRACT_FUNCTION,
     NAMED_RANGE_CHECK_FUNCTION,
+    MERGE_ORG_FILES_FUNCTION,
     FIXED_ROW_SUMMARY_FUNCTION,
     STRUCTURE_COMPARE_FUNCTION,
     USED_RANGE_SUMMARY_FUNCTION,
@@ -35,6 +36,7 @@ from .models import (
     TemplateDefinition,
 )
 from .feature_log import FeatureLog
+from .merge_org import MergeOrgResult, run_merge_org
 from .preflight_xlsx import (
     template_structure_values,
     validate_required_sheets_xlsx,
@@ -192,6 +194,32 @@ class AuditService:
             copies_dir=copies_dir,
         )
 
+    def merge_org_files(
+        self,
+        *,
+        input_dir: Path,
+        output_dir: Path,
+        period: str = "",
+        selected_files: list[Path] | None = None,
+        flow_name: str | None = None,
+        recursive: bool = True,
+        on_step: Optional[Callable[[str], None]] = None,
+        feature_log: Optional[FeatureLog] = None,
+        output_name: str | None = None,
+    ) -> MergeOrgResult:
+        """Run the standalone preparation flow that merges each institution's workbooks."""
+        return run_merge_org(
+            input_dir=input_dir,
+            output_dir=output_dir,
+            period=period,
+            selected_files=selected_files,
+            flow_name=flow_name,
+            recursive=recursive,
+            on_step=on_step,
+            feature_log=feature_log,
+            output_name=output_name,
+        )
+
     def run_flow(
         self,
         *,
@@ -243,6 +271,8 @@ class AuditService:
         named_range_checks = named_range_steps
         named_range_mappings = tuple(mapping for _, mapping in named_range_steps)
         executable_types = feature_types - {NAMED_RANGE_CHECK_FUNCTION}
+        if MERGE_ORG_FILES_FUNCTION in executable_types and executable_types != {MERGE_ORG_FILES_FUNCTION}:
+            raise ValueError("“合并同机构多表”必须单独成一个流程，不能与其他功能混用")
         summary_types = {
             USED_RANGE_SUMMARY_FUNCTION,
             FIXED_ROW_SUMMARY_FUNCTION,
@@ -262,7 +292,30 @@ class AuditService:
         # 只决定外部文件添加/公式校验/校验结果提取的实际文件是否保留。
         feature_log = FeatureLog(flow_name, output_dir)
         try:
-            if executable_types.issubset(summary_types):
+            if executable_types == {MERGE_ORG_FILES_FUNCTION}:
+                merge_steps = [
+                    (step, mappings[step.feature_name]) for step in steps
+                    if mappings[step.feature_name].feature_type == MERGE_ORG_FILES_FUNCTION
+                ]
+                if len(merge_steps) != 1:
+                    raise ValueError("“合并同机构多表”流程必须且只能启用一个合并模块")
+                merge_step, merge_mapping = merge_steps[0]
+                if not merge_step.output_result:
+                    raise ValueError("“合并同机构多表”必须填写“是否输出结果=是”")
+                result = self.merge_org_files(
+                    input_dir=input_dir,
+                    output_dir=output_dir,
+                    period=period,
+                    selected_files=selected_files,
+                    flow_name=flow_name,
+                    recursive=recursive,
+                    on_step=on_step,
+                    feature_log=feature_log,
+                    output_name=_output_prefix(
+                        merge_step.order, merge_mapping.name, merge_step.output_name
+                    ),
+                )
+            elif executable_types.issubset(summary_types):
                 if not summary_output_name:
                     raise ValueError("汇总流程至少应有一个汇总模块填写“是否输出结果=是”")
                 result = self.summarize_regions(

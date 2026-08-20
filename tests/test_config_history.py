@@ -19,6 +19,7 @@ from src.base_audit.name_config import (
     FIXED_ROW_SUMMARY_FUNCTION,
     FORMULA_COPY_FUNCTION,
     NAMED_RANGE_CHECK_FUNCTION,
+    MERGE_ORG_FILES_FUNCTION,
     STRUCTURE_COMPARE_FUNCTION,
     USED_RANGE_SUMMARY_FUNCTION,
     WORKBOOK_TABLE_MERGE_FUNCTION,
@@ -60,6 +61,7 @@ class ConfigHistoryTests(unittest.TestCase):
         self.assertEqual(("任意行汇总区域",), names[USED_RANGE_SUMMARY_FUNCTION])
         self.assertEqual(("固定行汇总区域",), names[FIXED_ROW_SUMMARY_FUNCTION])
         self.assertEqual((), names[WORKBOOK_TABLE_MERGE_FUNCTION])
+        self.assertEqual((), names[MERGE_ORG_FILES_FUNCTION])
         self.assertNotIn("区域汇总", names)
 
     def test_reset_defaults_keeps_history_and_custom_buttons(self):
@@ -114,6 +116,14 @@ class ConfigHistoryTests(unittest.TestCase):
             (False, False, False, False, False, True),
             tuple(step.output_result for step in steps),
         )
+
+    def test_default_merge_org_flow_is_a_single_output_step(self):
+        with TemporaryDirectory() as folder:
+            config = initialize_config(Path(folder) / "config.xlsx")
+            steps = load_flow_steps(config, "合并同机构多表")
+        self.assertEqual(("合并同机构多表",), tuple(step.feature_name for step in steps))
+        self.assertTrue(steps[0].output_result)
+        self.assertEqual("合并同机构多表", steps[0].output_name)
 
     def test_default_explanation_flow_checks_structure_before_summary(self):
         with TemporaryDirectory() as folder:
