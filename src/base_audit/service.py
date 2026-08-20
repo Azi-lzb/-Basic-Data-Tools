@@ -36,7 +36,7 @@ from .models import (
     TemplateDefinition,
 )
 from .feature_log import FeatureLog
-from .merge_org import MergeOrgResult, run_merge_org
+from .merge_org import MergeOrgResult, TemplateMergeResult, run_merge_org, run_template_merge
 from .preflight_xlsx import (
     template_structure_values,
     validate_required_sheets_xlsx,
@@ -218,6 +218,25 @@ class AuditService:
             on_step=on_step,
             feature_log=feature_log,
             output_name=output_name,
+        )
+
+    def merge_template_files(
+        self,
+        *,
+        base_template: Path,
+        source_templates: list[Path],
+        on_step: Optional[Callable[[str], None]] = None,
+    ) -> TemplateMergeResult:
+        """Create a combined template from explicitly selected workbooks.
+
+        This is intentionally outside config-driven audit flows: it is a
+        manual, low-frequency template authoring action and never examines the
+        workbench's source-data or auto-matched template fields.
+        """
+        return run_template_merge(
+            base_template=base_template,
+            source_templates=source_templates,
+            on_step=on_step,
         )
 
     def run_flow(

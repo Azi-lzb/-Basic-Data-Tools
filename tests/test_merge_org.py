@@ -10,6 +10,7 @@ from src.base_audit.merge_org import (
     _safe_sheet_name,
     _selected_sources,
     _source_period,
+    _template_merge_output,
 )
 
 
@@ -54,6 +55,18 @@ def test_output_folder_uses_requested_prefix_and_rejects_source_root() -> None:
             assert "不能与源数据目录相同" in str(exc)
         else:
             raise AssertionError("源数据目录应被拒绝作为输出目录")
+
+
+def test_template_merge_always_creates_a_separate_copy_next_to_base() -> None:
+    with TemporaryDirectory() as folder:
+        base = Path(folder) / "！个人贷款模板.xlsx"
+        _workbook(base)
+        output, report = _template_merge_output(base)
+        assert output.parent == base.parent / "联合模板"
+        assert output != base
+        assert output.name.startswith("！个人贷款模板_联合模板_")
+        assert output.suffix == ".xlsx"
+        assert report.name.startswith("！个人贷款模板_联合模板检查报告_")
 
 
 def test_openpyxl_merge_keeps_all_sheets_and_formulas() -> None:

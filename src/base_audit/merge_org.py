@@ -7,6 +7,7 @@ ranges on the merged workbook afterwards, then use the ordinary audit flow.
 from __future__ import annotations
 
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -53,6 +54,28 @@ class MergeOrgResult:
         if self.log_path:
             text += f"\n运行日志：{self.log_path}"
         return text
+
+
+@dataclass(frozen=True)
+class TemplateMergeResult:
+    """Result of the low-frequency, interactive template-composition action."""
+
+    output_path: Path
+    report_path: Path
+    base_template: Path
+    copied_sheets: tuple[tuple[str, str], ...]
+    skipped_sheets: tuple[tuple[str, str], ...]
+    formula_findings: tuple[tuple[str, str, str, str, str], ...]
+
+    def summary_text(self) -> str:
+        return (
+            "联合模板制作完成："
+            f"复制 {len(self.copied_sheets)} 张工作表，"
+            f"跳过同名表 {len(self.skipped_sheets)} 张，"
+            f"公式待核实 {len(self.formula_findings)} 处。\n"
+            f"联合模板：{self.output_path}\n"
+            f"检查报告：{self.report_path}"
+        )
 
 
 def _organisation_from_source(path: Path) -> str:
@@ -110,6 +133,107 @@ def _output_folder(input_dir: Path, output_dir: Path, output_name: str) -> Path:
         raise ValueError("输出目录位于源数据目录内但不在“审核结果”目录下，递归时可能重复合并；请调整输出目录")
     batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
     return output_resolved / f"{output_name}_{batch_id}"
+
+
+def _template_merge_output(base_template: Path) -> tuple[Path, Path]:
+    """Return new artifact paths without ever writing to the selected base."""
+    batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
+    output_dir = base_template.parent / "联合模板"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output = output_dir / f"{base_template.stem}_联合模板_{batch_id}{base_template.suffix}"
+    report = output_dir / f"{base_template.stem}_联合模板检查报告_{batch_id}.xlsx"
+    return output, report
+
+
+def _matrix(value: object) -> list[list[object]]:
+    if value is None:
+        return []
+    if not isinstance(value, tuple):
+        return [[value]]
+    if value and not isinstance(value[0], tuple):
+        return [list(value)]
+    return [list(row) for row in value]
+
+
+def _column_name(column: int) -> str:
+    result = ""
+    while column:
+        column, remainder = divmod(column - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
+def _formula_findings(workbook: object) -> list[tuple[str, str, str, str, str]]:
+    """Find broken or still-external formulas in the completed template."""
+    findings: list[tuple[str, str, str, str, str]] = []
+    for sheet_index in range(1, workbook.Worksheets.Count + 1):
+        sheet = workbook.Worksheets(sheet_index)
+        used = sheet.UsedRange
+        formulas = _matrix(used.Formula)
+        values = _matrix(used.Value2)
+        for row_offset, formula_row in enumerate(formulas):
+            for column_offset, formula_value in enumerate(formula_row):
+                if not isinstance(formula_value, str) or not formula_value.startswith("="):
+                    continue
+                value = ""
+                if row_offset < len(values) and column_offset < len(values[row_offset]):
+                    value = values[row_offset][column_offset]
+                address = f"{_column_name(int(used.Column) + column_offset)}{int(used.Row) + row_offset}"
+                formula_text = str(formula_value)
+                value_text = "" if value is None else str(value)
+                if "#REF!" in formula_text or "#REF!" in value_text:
+                    findings.append((sheet.Name, address, "#REF! 引用错误", formula_text, value_text))
+                elif "#NAME?" in value_text:
+                    findings.append((sheet.Name, address, "#NAME? 名称错误", formula_text, value_text))
+                elif re.search(r"\[[^\]]+\]", formula_text):
+                    findings.append((sheet.Name, address, "仍引用外部工作簿", formula_text, value_text))
+    return findings
+
+
+def _write_template_merge_report(
+    report_path: Path,
+    *,
+    base_template: Path,
+    sources: list[Path],
+    copied: list[tuple[str, str]],
+    skipped: list[tuple[str, str]],
+    findings: list[tuple[str, str, str, str, str]],
+) -> None:
+    from openpyxl import Workbook
+
+    book = Workbook()
+    summary = book.active
+    summary.title = "合并说明"
+    summary.append(("项目", "内容"))
+    summary.append(("底稿模板", str(base_template)))
+    summary.append(("来源工作簿", "；".join(str(path) for path in sources)))
+    summary.append(("复制工作表数", len(copied)))
+    summary.append(("跳过同名工作表数", len(skipped)))
+    summary.append(("公式待核实数", len(findings)))
+    summary.append(("提示", "请将含集中系统数据、参照表等外部依赖工作表的模板选作底稿；原始底稿和来源文件均未修改。"))
+
+    copied_sheet = book.create_sheet("工作表处理清单")
+    copied_sheet.append(("来源工作簿", "工作表", "处理结果"))
+    for source, sheet in copied:
+        copied_sheet.append((source, sheet, "已复制"))
+    for source, sheet in skipped:
+        copied_sheet.append((source, sheet, "同名已存在，保留底稿/先复制版本"))
+
+    formula_sheet = book.create_sheet("公式检查")
+    formula_sheet.append(("工作表", "定位单元格", "检查结果", "公式", "当前结果"))
+    for item in findings:
+        formula_sheet.append(item)
+    if not findings:
+        formula_sheet.append(("—", "—", "未发现 #REF!、#NAME? 或外部工作簿引用", "", ""))
+    for sheet in book.worksheets:
+        sheet.freeze_panes = "A2"
+        for column in sheet.columns:
+            letter = column[0].column_letter
+            sheet.column_dimensions[letter].width = min(
+                60, max(12, max(len(str(cell.value or "")) for cell in column) + 2)
+            )
+    book.save(report_path)
+    book.close()
 
 
 def _copy_sheet_contents(source_sheet: object, target_workbook: object) -> object:
@@ -222,6 +346,110 @@ def _merge_one_org_com(files: list[Path], out_path: Path) -> int:
         finally:
             if merged is not None:
                 excel.close_workbook(merged, save=False)
+
+
+def run_template_merge(
+    *,
+    base_template: Path,
+    source_templates: list[Path],
+    on_step: Optional[Callable[[str], None]] = None,
+) -> TemplateMergeResult:
+    """Make a new combined template from a manually selected base template.
+
+    This deliberately has no relationship with the ordinary source-directory
+    merge.  The caller selects every file explicitly.  The base is copied at
+    filesystem level first, then only source sheets whose names are absent in
+    that copy are imported with Excel/WPS native range copying.  Therefore the
+    base's names, styles and common dependency sheets stay authoritative.
+    """
+    base_template = Path(base_template).resolve()
+    if not base_template.is_file():
+        raise FileNotFoundError(f"底稿模板不存在：{base_template}")
+    if base_template.suffix.lower() not in {".xlsx", ".xlsm", ".xls"}:
+        raise ValueError("底稿模板必须是 Excel 文件")
+    unique_sources: list[Path] = []
+    seen = {base_template}
+    for raw_path in source_templates:
+        path = Path(raw_path).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"待合并工作簿不存在：{path}")
+        if path.suffix.lower() not in {".xlsx", ".xlsm", ".xls"}:
+            raise ValueError(f"待合并工作簿不是 Excel 文件：{path.name}")
+        if path not in seen:
+            unique_sources.append(path)
+            seen.add(path)
+    if not unique_sources:
+        raise ValueError("请至少选择一个除底稿模板外的来源工作簿")
+
+    output_path, report_path = _template_merge_output(base_template)
+    copied: list[tuple[str, str]] = []
+    skipped: list[tuple[str, str]] = []
+    findings: list[tuple[str, str, str, str, str]] = []
+    shutil.copy2(str(base_template), str(output_path))
+    if on_step is not None:
+        on_step("已创建底稿副本；原始模板不会修改")
+        on_step("提示：请确认底稿模板已包含集中系统数据、参照表等外部依赖工作表")
+
+    try:
+        with ExcelSession() as excel:
+            merged = excel.open_workbook(output_path, read_only=False)
+            try:
+                existing = {
+                    str(merged.Worksheets(index).Name).casefold()
+                    for index in range(1, merged.Worksheets.Count + 1)
+                }
+                for source_path in unique_sources:
+                    if on_step is not None:
+                        on_step(f"正在复制工作簿：{source_path.name}")
+                    source_book = excel.open_workbook(source_path, read_only=True)
+                    try:
+                        for index in range(1, source_book.Worksheets.Count + 1):
+                            source_sheet = source_book.Worksheets(index)
+                            sheet_name = str(source_sheet.Name)
+                            if sheet_name.casefold() in existing:
+                                skipped.append((source_path.name, sheet_name))
+                                continue
+                            copied_sheet = _copy_sheet_contents(source_sheet, merged)
+                            copied_sheet.Name = sheet_name
+                            existing.add(sheet_name.casefold())
+                            copied.append((source_path.name, sheet_name))
+                    finally:
+                        excel.close_workbook(source_book)
+                try:
+                    merged.Calculate()
+                except Exception:
+                    # Formula scanning still catches formula-text #REF! and
+                    # remaining external links when this engine cannot recalc.
+                    pass
+                findings = _formula_findings(merged)
+                merged.Save()
+            finally:
+                excel.close_workbook(merged, save=False)
+    except Exception:
+        # Do not leave a plausible-looking partial template after a failure.
+        if output_path.exists():
+            output_path.unlink()
+        raise
+
+    _write_template_merge_report(
+        report_path,
+        base_template=base_template,
+        sources=unique_sources,
+        copied=copied,
+        skipped=skipped,
+        findings=findings,
+    )
+    if on_step is not None:
+        on_step(f"联合模板已生成：复制 {len(copied)} 张，跳过同名表 {len(skipped)} 张")
+        on_step(f"公式检查完成：待核实 {len(findings)} 处")
+    return TemplateMergeResult(
+        output_path=output_path,
+        report_path=report_path,
+        base_template=base_template,
+        copied_sheets=tuple(copied),
+        skipped_sheets=tuple(skipped),
+        formula_findings=tuple(findings),
+    )
 
 
 def run_merge_org(

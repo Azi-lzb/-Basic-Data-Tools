@@ -293,6 +293,76 @@ class WebApi:
                 self.state["templateManual"] = True
         return value
 
+    def create_template_merge(self) -> bool:
+        """Interactive, manual-only creation of one combined audit template.
+
+        It deliberately bypasses the workbench form and template recommendation:
+        the user selects both the base and every input workbook in dialogs.
+        """
+        if self.state["busy"]:
+            return False
+        import webview
+        file_dialog = getattr(webview, "FileDialog", None)
+        open_dialog = (
+            getattr(file_dialog, "OPEN", None)
+            if file_dialog is not None
+            else getattr(webview, "OPEN_DIALOG")
+        )
+        base_dir = self.state.get("templateDir") or self.project_root
+        selected_base = webview.windows[0].create_file_dialog(
+            open_dialog,
+            directory=str(base_dir),
+            file_types=("Excel 文件 (*.xlsx;*.xlsm;*.xls)",),
+        )
+        if not selected_base:
+            self._log("已取消制作联合模板：未选择底稿模板")
+            return False
+        base_template = Path(selected_base[0]).resolve()
+        selected_sources = webview.windows[0].create_file_dialog(
+            open_dialog,
+            directory=str(base_template.parent),
+            allow_multiple=True,
+            file_types=("Excel 文件 (*.xlsx;*.xlsm;*.xls)",),
+        )
+        if not selected_sources:
+            self._log("已取消制作联合模板：未选择待复制工作簿")
+            return False
+        source_templates = [Path(path).resolve() for path in selected_sources]
+        if not [path for path in source_templates if path != base_template]:
+            self._log("已取消制作联合模板：待复制工作簿不能只有底稿模板本身")
+            return False
+        self.state["busy"] = True
+        self.state["status"] = "正在制作联合模板，请勿关闭窗口……"
+        self._log(f"开始制作联合模板：底稿“{base_template.name}”")
+        self._log("提示：请将含外部依赖工作表的模板选作底稿；原始文件不会修改")
+        threading.Thread(
+            target=self._template_merge_worker,
+            args=(base_template, source_templates),
+            daemon=True,
+        ).start()
+        return True
+
+    def _template_merge_worker(
+        self, base_template: Path, source_templates: list[Path]
+    ) -> None:
+        started = time.monotonic()
+        try:
+            service = AuditService(config_path=self.project_root / "data" / "config.xlsx")
+            result = service.merge_template_files(
+                base_template=base_template,
+                source_templates=source_templates,
+                on_step=self._log_detail,
+            )
+            self.state["status"] = result.summary_text().splitlines()[0]
+            self._log(result.summary_text())
+        except Exception as exc:
+            self.state["status"] = "制作联合模板失败"
+            self._log("制作联合模板失败：" + str(exc))
+        finally:
+            elapsed = time.monotonic() - started
+            self._log(f"任务结束，本次耗时：{elapsed:.1f} 秒")
+            self.state["busy"] = False
+
     def update(self, values: dict[str, Any]) -> dict[str, Any]:
         for key in ("input", "templateDir", "template", "external", "output"):
             if key in values:
