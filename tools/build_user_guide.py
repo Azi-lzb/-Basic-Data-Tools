@@ -401,7 +401,7 @@ def build_document() -> None:
     bullet = create_numbering(doc, bullet=True)
     add_list_item(doc, "“汇总核查表校验”通常不勾选。源数据目录一般就是本期同类报表所在目录。", bullet)
     add_list_item(doc, "“汇总校验结果说明”在机构文件分散于子文件夹时通常勾选。程序会向下查找 xlsx 文件。", bullet)
-    add_list_item(doc, "程序会跳过自身生成的“执行结果、审核结果、机构审核副本、运行中间副本、测试结果”目录，避免重复处理。", bullet)
+    add_list_item(doc, "程序固定跳过“执行结果”目录；其他不需处理的目录只要名称包含“_skip”也会跳过，例如“历史材料_skip”。", bullet)
 
     add_heading(doc, "2. 审核后看什么", 1)
     add_table(

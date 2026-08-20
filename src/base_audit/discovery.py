@@ -46,8 +46,19 @@ class TemplateSuggestion:
     alternatives: tuple[tuple[str, float], ...] = ()
 
 
-# “审核结果”是旧版默认目录，保留在名单中以免旧输出在递归时被再次读取。
-GENERATED_OUTPUT_FOLDERS = {"执行结果", "审核结果", "机构审核副本", "运行中间副本", "测试结果"}
+# 目录名包含此标识即不作为输入扫描。用户可在任何目录名中加入
+# “_skip”来排除该目录；“执行结果”保留为旧版兼容的固定排除名。
+SKIP_DIRECTORY_MARKER = "_skip"
+GENERATED_OUTPUT_FOLDERS = {"执行结果"}
+
+
+def is_skipped_input_path(parts: tuple[str, ...]) -> bool:
+    """Whether a relative source path is excluded by the directory rule."""
+    return any(
+        part.casefold() in GENERATED_OUTPUT_FOLDERS
+        or SKIP_DIRECTORY_MARKER in part.casefold()
+        for part in parts
+    )
 
 
 def source_workbooks(input_dir: Path, *, recursive: bool = False) -> list[Path]:
@@ -61,7 +72,7 @@ def source_workbooks(input_dir: Path, *, recursive: bool = False) -> list[Path]:
         if path.suffix.lower() in SOURCE_SUFFIXES
         and not path.name.startswith(("~$", "!", "！"))
         and "_审核版" not in path.stem
-        and not any(part in GENERATED_OUTPUT_FOLDERS for part in path.relative_to(input_dir).parts[:-1])
+        and not is_skipped_input_path(path.relative_to(input_dir).parts[:-1])
     )
 
 
@@ -89,7 +100,7 @@ def explanation_files(input_dir: Path, *, recursive: bool = False) -> list[Path]
         and path.suffix.lower() not in SOURCE_SUFFIXES
         and path.suffix.lower() not in NON_XLSX_SKIPPED_SUFFIXES
         and not path.name.startswith(("~$", "!", "！", "."))
-        and not any(part in GENERATED_OUTPUT_FOLDERS for part in path.relative_to(input_dir).parts[:-1])
+        and not is_skipped_input_path(path.relative_to(input_dir).parts[:-1])
     )
 
 

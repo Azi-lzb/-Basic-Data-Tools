@@ -46,8 +46,8 @@ def test_empty_selection_means_all_source_files() -> None:
 def test_output_folder_uses_requested_prefix_and_rejects_source_root() -> None:
     with TemporaryDirectory() as folder:
         root = Path(folder)
-        result = _output_folder(root, root / "审核结果", "合并同机构多表")
-        assert result.parent == root / "审核结果"
+        result = _output_folder(root, root / "执行结果", "合并同机构多表")
+        assert result.parent == root / "执行结果"
         assert result.name.startswith("合并同机构多表_")
         try:
             _output_folder(root, root, "合并同机构多表")

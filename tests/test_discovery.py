@@ -67,9 +67,9 @@ class DiscoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / "机构甲").mkdir()
-            (root / "审核结果" / "机构审核副本").mkdir(parents=True)
+            (root / "历史材料_skip" / "机构审核副本").mkdir(parents=True)
             (root / "机构甲" / "甲银行_单位贷款_202607.xlsx").touch()
-            (root / "审核结果" / "机构审核副本" / "甲银行_审核版.xlsx").touch()
+            (root / "历史材料_skip" / "机构审核副本" / "甲银行_审核版.xlsx").touch()
             files = source_workbooks(root, recursive=True)
         self.assertEqual([path.name for path in files], ["甲银行_单位贷款_202607.xlsx"])
 
