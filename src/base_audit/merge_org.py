@@ -142,6 +142,80 @@ def _copy_sheet_contents(source_sheet: object, target_workbook: object) -> objec
     return copied
 
 
+def _copy_sheet_openpyxl(source_sheet, target_workbook, title: str) -> None:
+    """Fast copy for template preparation: values, formulas and table layout."""
+    from openpyxl.cell.cell import MergedCell
+
+    target = target_workbook.create_sheet(title)
+    for row in source_sheet.iter_rows():
+        for cell in row:
+            if isinstance(cell, MergedCell):
+                continue
+            target.cell(cell.row, cell.column, cell.value)
+    for merged_range in source_sheet.merged_cells.ranges:
+        target.merge_cells(str(merged_range))
+    target.sheet_state = source_sheet.sheet_state
+
+
+def _merge_one_org_openpyxl(files: list[Path], out_path: Path) -> int:
+    """Pure-Python merge used first for speed and cross-platform portability."""
+    from openpyxl import Workbook, load_workbook
+
+    merged = Workbook()
+    cover = merged.active
+    cover.title = "合并说明"
+    cover["A1"] = "本工作簿由“合并同机构多表”自动生成。请在此文件上重新定义命名区域并制作审核模板。"
+    existing = {cover.title.casefold()}
+    sheet_count = 0
+    try:
+        for source_path in sorted(files):
+            source_book = load_workbook(source_path, read_only=False, data_only=False)
+            try:
+                report_type = _report_type_from_source(source_path)
+                for source_sheet in source_book.worksheets:
+                    title = _safe_sheet_name(f"{report_type}_{source_sheet.title}", existing)
+                    _copy_sheet_openpyxl(source_sheet, merged, title)
+                    sheet_count += 1
+            finally:
+                source_book.close()
+        merged.save(out_path)
+        return sheet_count
+    finally:
+        merged.close()
+
+
+def _merge_one_org_com(files: list[Path], out_path: Path) -> int:
+    """Compatibility fallback when a workbook cannot be handled by openpyxl."""
+    source_sheet_count = 0
+    with ExcelSession() as excel:
+        merged = None
+        try:
+            merged = excel.excel.Workbooks.Add()
+            while merged.Worksheets.Count > 1:
+                merged.Worksheets(merged.Worksheets.Count).Delete()
+            placeholder = merged.Worksheets(1)
+            placeholder.Name = "合并说明"
+            placeholder.Visible = -1
+            placeholder.Cells(1, 1).Value = "本工作簿由“合并同机构多表”自动生成。请在此文件上重新定义命名区域并制作审核模板。"
+            existing: set[str] = {"合并说明".casefold()}
+            for source_path in sorted(files):
+                source_book = excel.open_workbook(source_path, read_only=True)
+                try:
+                    report_type = _report_type_from_source(source_path)
+                    for index in range(1, source_book.Worksheets.Count + 1):
+                        source_sheet = source_book.Worksheets(index)
+                        copied = _copy_sheet_contents(source_sheet, merged)
+                        copied.Name = _safe_sheet_name(f"{report_type}_{source_sheet.Name}", existing)
+                        source_sheet_count += 1
+                finally:
+                    excel.close_workbook(source_book)
+            merged.SaveAs(str(out_path), FileFormat=51)
+            return source_sheet_count
+        finally:
+            if merged is not None:
+                excel.close_workbook(merged, save=False)
+
+
 def run_merge_org(
     *,
     input_dir: Path,
@@ -173,68 +247,43 @@ def run_merge_org(
     if on_step is not None:
         on_step("提示：机构识别使用文件名下划线第一段；文件名第一段必须是机构全称")
     items: list[MergeOrgItem] = []
-    with ExcelSession() as excel:
-        if on_step is not None:
-            on_step(f"已连接表格引擎：{excel.engine_name}")
-        for organisation, files in sorted(groups.items()):
-            dates = sorted({value for value in (_source_period(path) for path in files) if value})
-            if len(dates) > 1 and on_step is not None:
-                on_step(f"提示：机构“{organisation}”包含多个数据期（{'、'.join(dates)}），请确认")
-            output_period = period.strip() or (dates[0] if dates else "未识别日期")
-            out_path = target_dir / f"{organisation}_合并_{output_period}.xlsx"
-            merged = None
-            source_sheet_count = 0
+    for organisation, files in sorted(groups.items()):
+        dates = sorted({value for value in (_source_period(path) for path in files) if value})
+        if len(dates) > 1 and on_step is not None:
+            on_step(f"提示：机构“{organisation}”包含多个数据期（{'、'.join(dates)}），请确认")
+        output_period = period.strip() or (dates[0] if dates else "未识别日期")
+        out_path = target_dir / f"{organisation}_合并_{output_period}.xlsx"
+        source_sheet_count = 0
+        engine = "openpyxl"
+        try:
+            if on_step is not None:
+                on_step(f"正在合并：{organisation}（{len(files)} 个文件，openpyxl）")
+            source_sheet_count = _merge_one_org_openpyxl(files, out_path)
+        except Exception as python_error:
+            engine = "Excel/WPS COM"
+            if out_path.exists():
+                out_path.unlink()
+            if on_step is not None:
+                on_step(
+                    f"提示：机构“{organisation}”无法使用 openpyxl 合并（{python_error}），"
+                    "正在回退 Excel/WPS"
+                )
             try:
-                if on_step is not None:
-                    on_step(f"正在合并：{organisation}（{len(files)} 个文件）")
-                merged = excel.excel.Workbooks.Add()
-                # Excel's user setting may create several blank sheets.  Keep
-                # one *visible* cover sheet permanently: some COM engines
-                # reject deleting/moving sheets if copied source sheets are
-                # hidden.  It also makes the merged workbook self-explanatory.
-                while merged.Worksheets.Count > 1:
-                    merged.Worksheets(merged.Worksheets.Count).Delete()
-                placeholder = merged.Worksheets(1)
-                placeholder.Name = "合并说明"
-                placeholder.Visible = -1
-                placeholder.Cells(1, 1).Value = "本工作簿由“合并同机构多表”自动生成。请在此文件上重新定义命名区域并制作审核模板。"
-                existing: set[str] = set()
-                for source_path in sorted(files):
-                    source_book = None
-                    try:
-                        source_book = excel.open_workbook(source_path, read_only=True)
-                        report_type = _report_type_from_source(source_path)
-                        for index in range(1, source_book.Worksheets.Count + 1):
-                            source_sheet = source_book.Worksheets(index)
-                            try:
-                                copied = _copy_sheet_contents(source_sheet, merged)
-                            except Exception as exc:
-                                raise RuntimeError(
-                                    f"复制“{source_path.name}”中的工作表“{source_sheet.Name}”失败：{exc}"
-                                ) from exc
-                            copied.Name = _safe_sheet_name(
-                                f"{report_type}_{source_sheet.Name}", existing
-                            )
-                            source_sheet_count += 1
-                    finally:
-                        if source_book is not None:
-                            excel.close_workbook(source_book)
-                merged.SaveAs(str(out_path), FileFormat=51)
+                source_sheet_count = _merge_one_org_com(files, out_path)
+            except Exception as com_error:
                 items.append(MergeOrgItem(
-                    organisation, out_path, tuple(files), source_sheet_count, "成功",
-                    "命名区域需在合并文件上重建；跨表外部引用仍可能指向原文件，请手动更新",
+                    organisation, None, tuple(files), source_sheet_count, "失败",
+                    f"openpyxl：{python_error}；Excel/WPS：{com_error}",
                 ))
                 if on_step is not None:
-                    on_step(f"完成合并：{organisation}（{source_sheet_count} 张工作表）")
-            except Exception as exc:
-                items.append(MergeOrgItem(
-                    organisation, None, tuple(files), source_sheet_count, "失败", str(exc)
-                ))
-                if on_step is not None:
-                    on_step(f"合并失败：{organisation}（{exc}），已继续其他机构")
-            finally:
-                if merged is not None:
-                    excel.close_workbook(merged, save=False)
+                    on_step(f"合并失败：{organisation}（{com_error}），已继续其他机构")
+                continue
+        items.append(MergeOrgItem(
+            organisation, out_path, tuple(files), source_sheet_count, "成功",
+            f"使用 {engine}；命名区域需在合并文件上重建；跨表外部引用仍可能指向原文件，请手动更新",
+        ))
+        if on_step is not None:
+            on_step(f"完成合并：{organisation}（{source_sheet_count} 张工作表，{engine}）")
 
     if feature_log is not None:
         feature_log.add_sheet(

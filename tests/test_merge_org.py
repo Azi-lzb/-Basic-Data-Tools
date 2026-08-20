@@ -1,10 +1,11 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from src.base_audit.merge_org import (
     _organisation_from_source,
+    _merge_one_org_openpyxl,
     _output_folder,
     _safe_sheet_name,
     _selected_sources,
@@ -53,3 +54,33 @@ def test_output_folder_uses_requested_prefix_and_rejects_source_root() -> None:
             assert "不能与源数据目录相同" in str(exc)
         else:
             raise AssertionError("源数据目录应被拒绝作为输出目录")
+
+
+def test_openpyxl_merge_keeps_all_sheets_and_formulas() -> None:
+    with TemporaryDirectory() as folder:
+        root = Path(folder)
+        first = root / "机构A_个人贷款_B00_2026-07-31_在线核查表.xlsx"
+        second = root / "机构A_单位贷款_B00_2026-07-31_在线核查表.xlsx"
+        for path, sheet_name, hidden in ((first, "个人明细", False), (second, "单位明细", True)):
+            book = Workbook()
+            sheet = book.active
+            sheet.title = sheet_name
+            sheet["A1"] = "指标"
+            sheet["B1"] = "金额"
+            sheet["B2"] = "=1+1"
+            sheet.merge_cells("A4:B4")
+            if hidden:
+                book.create_sheet("封面")
+                sheet.sheet_state = "hidden"
+            book.save(path)
+            book.close()
+        output = root / "机构A_合并_2026-07-31.xlsx"
+        assert _merge_one_org_openpyxl([first, second], output) == 3
+        merged = load_workbook(output, read_only=False, data_only=False)
+        try:
+            assert len(merged.worksheets) == 4
+            assert merged["个人贷款_个人明细"]["B2"].value == "=1+1"
+            assert "A4:B4" in {str(item) for item in merged["个人贷款_个人明细"].merged_cells.ranges}
+            assert merged["单位贷款_单位明细"].sheet_state == "hidden"
+        finally:
+            merged.close()
