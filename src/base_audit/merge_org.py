@@ -112,6 +112,39 @@ def _output_folder(input_dir: Path, output_dir: Path, output_name: str) -> Path:
     return output_resolved / f"{output_name}_{batch_id}"
 
 
+def _copy_sheet_with_fallback(source_sheet: object, target_workbook: object) -> tuple[object, bool]:
+    """Copy a sheet, falling back to UsedRange for restrictive COM engines.
+
+    Some Excel/WPS COM builds reject Worksheet.Copy across workbooks although
+    both workbooks belong to the same application instance.  Range.Copy keeps
+    the data, formulas, cell formatting and merged cells required for making
+    the later audit template; it intentionally does not promise charts or
+    workbook-level names, which must be rebuilt on the merged workbook anyway.
+    """
+    target_sheet = target_workbook.Worksheets(target_workbook.Worksheets.Count)
+    try:
+        source_sheet.Copy(After=target_sheet)
+        return target_workbook.Worksheets(target_workbook.Worksheets.Count), False
+    except Exception:
+        copied = target_workbook.Worksheets.Add(After=target_sheet)
+        used = source_sheet.UsedRange
+        used.Copy(copied.Cells(used.Row, used.Column))
+        # Range.Copy does not retain column widths.  Restrict the work to the
+        # actual used columns rather than iterating the full worksheet.
+        first_column = int(used.Column)
+        last_column = first_column + int(used.Columns.Count) - 1
+        for column in range(first_column, last_column + 1):
+            try:
+                copied.Columns(column).ColumnWidth = source_sheet.Columns(column).ColumnWidth
+            except Exception:
+                pass
+        try:
+            copied.Visible = source_sheet.Visible
+        except Exception:
+            pass
+        return copied, True
+
+
 def run_merge_org(
     *,
     input_dir: Path,
@@ -172,22 +205,22 @@ def run_merge_org(
                         report_type = _report_type_from_source(source_path)
                         for index in range(1, source_book.Worksheets.Count + 1):
                             source_sheet = source_book.Worksheets(index)
-                            target_sheet = merged.Worksheets(merged.Worksheets.Count)
-                            # Do not pass ``None`` as Before: on some Excel COM
-                            # builds it is treated as an actual Before argument,
-                            # making Worksheet.Copy reject the simultaneous After
-                            # argument.  Explicit After is the reliable pywin32
-                            # form for cross-workbook worksheet copying.
                             try:
-                                source_sheet.Copy(After=target_sheet)
+                                copied, used_range_fallback = _copy_sheet_with_fallback(
+                                    source_sheet, merged
+                                )
                             except Exception as exc:
                                 raise RuntimeError(
                                     f"复制“{source_path.name}”中的工作表“{source_sheet.Name}”失败：{exc}"
                                 ) from exc
-                            copied = merged.Worksheets(merged.Worksheets.Count)
                             copied.Name = _safe_sheet_name(
                                 f"{report_type}_{source_sheet.Name}", existing
                             )
+                            if used_range_fallback and on_step is not None:
+                                on_step(
+                                    f"提示：{source_path.name}｜{source_sheet.Name} 不支持整表复制，"
+                                    "已按实际使用区域复制"
+                                )
                             source_sheet_count += 1
                     finally:
                         if source_book is not None:
