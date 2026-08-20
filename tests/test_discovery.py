@@ -73,6 +73,16 @@ class DiscoveryTests(unittest.TestCase):
             files = source_workbooks(root, recursive=True)
         self.assertEqual([path.name for path in files], ["甲银行_单位贷款_202607.xlsx"])
 
+    def test_recursive_source_files_skip_current_execution_output_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "执行结果").mkdir()
+            (root / "机构甲").mkdir()
+            (root / "执行结果" / "甲银行_审核版.xlsx").touch()
+            (root / "机构甲" / "甲银行_单位贷款_202607.xlsx").touch()
+            files = source_workbooks(root, recursive=True)
+        self.assertEqual([path.name for path in files], ["甲银行_单位贷款_202607.xlsx"])
+
     def test_template_catalog_reuses_unchanged_index(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

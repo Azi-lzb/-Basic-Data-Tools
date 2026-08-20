@@ -46,7 +46,8 @@ class TemplateSuggestion:
     alternatives: tuple[tuple[str, float], ...] = ()
 
 
-GENERATED_OUTPUT_FOLDERS = {"审核结果", "机构审核副本", "运行中间副本", "测试结果"}
+# “审核结果”是旧版默认目录，保留在名单中以免旧输出在递归时被再次读取。
+GENERATED_OUTPUT_FOLDERS = {"执行结果", "审核结果", "机构审核副本", "运行中间副本", "测试结果"}
 
 
 def source_workbooks(input_dir: Path, *, recursive: bool = False) -> list[Path]:

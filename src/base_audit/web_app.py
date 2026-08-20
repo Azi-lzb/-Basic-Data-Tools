@@ -262,7 +262,7 @@ class WebApi:
                 self.state["templateManual"] = False
             if field in {"input", "templateDir"}:
                 if field == "input" and not self.state["outputPinned"]:
-                    self.state["output"] = str(Path(value) / "审核结果")
+                    self.state["output"] = str(Path(value) / "执行结果")
                     self.state["outputAuto"] = True
                 # 仅通过选择源数据目录触发一次模板推荐；选择模板目录只刷新文件清单。
                 # 用户手动选定模板后，仍以手动选择为准。
@@ -385,7 +385,7 @@ class WebApi:
             self.state["outputPinned"] = pinned
             self.state["outputAuto"] = not pinned
             if not pinned and self.state["input"]:
-                self.state["output"] = str(Path(self.state["input"]) / "审核结果")
+                self.state["output"] = str(Path(self.state["input"]) / "执行结果")
         if "recursive" in values:
             value = values["recursive"]
             recursive = (
@@ -439,7 +439,7 @@ class WebApi:
                 )
             ]
             if not self.state["outputPinned"]:
-                self.state["output"] = str(input_dir / "审核结果")
+                self.state["output"] = str(input_dir / "执行结果")
                 self.state["outputAuto"] = True
         elif self.state.get("explanationFiles"):
             self.state["explanationFiles"] = []

@@ -72,6 +72,11 @@ class WebAppCompatibilityTests(unittest.TestCase):
         self.assertEqual(api.state["selectedFiles"], ["C:/报送目录/机构A.xlsx"])
         start.assert_called_once_with("audit", strict=True)
 
+    def test_unpinned_output_follows_input_with_execution_results_name(self) -> None:
+        api = WebApi(ROOT)
+        api.update({"input": "C:/报送目录", "outputPinned": False})
+        self.assertEqual(api.state["output"], str(Path("C:/报送目录") / "执行结果"))
+
     def test_flow_start_logs_before_background_worker_for_win7_compatibility(self) -> None:
         api = WebApi(ROOT)
         with patch("base_audit.web_app.threading.Thread") as thread:

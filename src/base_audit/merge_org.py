@@ -124,13 +124,13 @@ def _output_folder(input_dir: Path, output_dir: Path, output_name: str) -> Path:
     input_resolved = input_dir.resolve()
     output_resolved = output_dir.resolve()
     if output_resolved == input_resolved:
-        raise ValueError("输出目录不能与源数据目录相同；请使用源数据目录下的“审核结果”或其他独立目录")
+        raise ValueError("输出目录不能与源数据目录相同；请使用源数据目录下的“执行结果”或其他独立目录")
     try:
         relative = output_resolved.relative_to(input_resolved)
     except ValueError:
         relative = None
-    if relative is not None and "审核结果" not in relative.parts:
-        raise ValueError("输出目录位于源数据目录内但不在“审核结果”目录下，递归时可能重复合并；请调整输出目录")
+    if relative is not None and not {"执行结果", "审核结果"}.intersection(relative.parts):
+        raise ValueError("输出目录位于源数据目录内但不在“执行结果”目录下，递归时可能重复合并；请调整输出目录")
     batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
     return output_resolved / f"{output_name}_{batch_id}"
 

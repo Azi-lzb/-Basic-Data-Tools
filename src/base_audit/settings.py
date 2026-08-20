@@ -46,10 +46,15 @@ class SettingsStore:
         last_input_dir = str(payload.get("last_input_dir") or "")
         last_output_dir = str(payload.get("last_output_dir") or "")
         # 旧设置没有书钉字段时，保留用户原先手动改过的非默认输出目录。
+        # “审核结果”是旧版默认值，“执行结果”是当前默认值；两者都不应
+        # 被误判为用户手动固定的目录。
         legacy_pinned = bool(
             last_input_dir
             and last_output_dir
-            and last_output_dir != str(Path(last_input_dir) / "审核结果")
+            and last_output_dir not in {
+                str(Path(last_input_dir) / "审核结果"),
+                str(Path(last_input_dir) / "执行结果"),
+            }
         )
         return UserSettings(
             last_input_dir=last_input_dir,
