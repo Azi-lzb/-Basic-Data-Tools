@@ -225,6 +225,20 @@ def run_merge_org(
                     finally:
                         if source_book is not None:
                             excel.close_workbook(source_book)
+                # 源文件可能全部是隐藏/超隐藏工作表。Excel 不允许删除最后
+                # 一张可视表；这种情况下强制显示第一张已复制表，用户如确有
+                # 需要可在合并文件中再隐藏它。
+                copied_sheets = [merged.Worksheets(i) for i in range(2, merged.Worksheets.Count + 1)]
+                has_visible_sheet = any(
+                    int(sheet.Visible) == -1 for sheet in copied_sheets
+                )
+                if not has_visible_sheet and copied_sheets:
+                    copied_sheets[0].Visible = -1
+                    if on_step is not None:
+                        on_step(
+                            f"提示：机构“{organisation}”的来源工作表均为隐藏状态，"
+                            "已将第一张合并工作表设为可视，避免 Excel 拒绝保存"
+                        )
                 placeholder.Delete()
                 merged.SaveAs(str(out_path), FileFormat=51)
                 items.append(MergeOrgItem(
