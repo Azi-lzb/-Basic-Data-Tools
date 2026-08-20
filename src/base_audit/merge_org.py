@@ -172,7 +172,18 @@ def run_merge_org(
                         report_type = _report_type_from_source(source_path)
                         for index in range(1, source_book.Worksheets.Count + 1):
                             source_sheet = source_book.Worksheets(index)
-                            source_sheet.Copy(None, merged.Worksheets(merged.Worksheets.Count))
+                            target_sheet = merged.Worksheets(merged.Worksheets.Count)
+                            # Do not pass ``None`` as Before: on some Excel COM
+                            # builds it is treated as an actual Before argument,
+                            # making Worksheet.Copy reject the simultaneous After
+                            # argument.  Explicit After is the reliable pywin32
+                            # form for cross-workbook worksheet copying.
+                            try:
+                                source_sheet.Copy(After=target_sheet)
+                            except Exception as exc:
+                                raise RuntimeError(
+                                    f"复制“{source_path.name}”中的工作表“{source_sheet.Name}”失败：{exc}"
+                                ) from exc
                             copied = merged.Worksheets(merged.Worksheets.Count)
                             copied.Name = _safe_sheet_name(
                                 f"{report_type}_{source_sheet.Name}", existing
