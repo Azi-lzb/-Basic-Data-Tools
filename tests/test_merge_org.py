@@ -78,7 +78,7 @@ def test_openpyxl_merge_keeps_all_sheets_and_formulas() -> None:
         assert _merge_one_org_openpyxl([first, second], output) == 3
         merged = load_workbook(output, read_only=False, data_only=False)
         try:
-            assert len(merged.worksheets) == 4
+            assert len(merged.worksheets) == 3
             assert merged["个人贷款_个人明细"]["B2"].value == "=1+1"
             assert "A4:B4" in {str(item) for item in merged["个人贷款_个人明细"].merged_cells.ranges}
             assert merged["单位贷款_单位明细"].sheet_state == "hidden"

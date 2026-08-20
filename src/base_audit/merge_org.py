@@ -162,10 +162,8 @@ def _merge_one_org_openpyxl(files: list[Path], out_path: Path) -> int:
     from openpyxl import Workbook, load_workbook
 
     merged = Workbook()
-    cover = merged.active
-    cover.title = "合并说明"
-    cover["A1"] = "本工作簿由“合并同机构多表”自动生成。请在此文件上重新定义命名区域并制作审核模板。"
-    existing = {cover.title.casefold()}
+    placeholder = merged.active
+    existing: set[str] = set()
     sheet_count = 0
     try:
         for source_path in sorted(files):
@@ -178,6 +176,12 @@ def _merge_one_org_openpyxl(files: list[Path], out_path: Path) -> int:
                     sheet_count += 1
             finally:
                 source_book.close()
+        copied_sheets = merged.worksheets[1:]
+        if not copied_sheets:
+            raise ValueError("来源工作簿没有可复制的工作表")
+        if not any(sheet.sheet_state == "visible" for sheet in copied_sheets):
+            copied_sheets[0].sheet_state = "visible"
+        merged.remove(placeholder)
         merged.save(out_path)
         return sheet_count
     finally:
@@ -194,10 +198,8 @@ def _merge_one_org_com(files: list[Path], out_path: Path) -> int:
             while merged.Worksheets.Count > 1:
                 merged.Worksheets(merged.Worksheets.Count).Delete()
             placeholder = merged.Worksheets(1)
-            placeholder.Name = "合并说明"
             placeholder.Visible = -1
-            placeholder.Cells(1, 1).Value = "本工作簿由“合并同机构多表”自动生成。请在此文件上重新定义命名区域并制作审核模板。"
-            existing: set[str] = {"合并说明".casefold()}
+            existing: set[str] = set()
             for source_path in sorted(files):
                 source_book = excel.open_workbook(source_path, read_only=True)
                 try:
@@ -209,6 +211,12 @@ def _merge_one_org_com(files: list[Path], out_path: Path) -> int:
                         source_sheet_count += 1
                 finally:
                     excel.close_workbook(source_book)
+            copied_sheets = [merged.Worksheets(i) for i in range(2, merged.Worksheets.Count + 1)]
+            if not copied_sheets:
+                raise ValueError("来源工作簿没有可复制的工作表")
+            if not any(int(sheet.Visible) == -1 for sheet in copied_sheets):
+                copied_sheets[0].Visible = -1
+            placeholder.Delete()
             merged.SaveAs(str(out_path), FileFormat=51)
             return source_sheet_count
         finally:
