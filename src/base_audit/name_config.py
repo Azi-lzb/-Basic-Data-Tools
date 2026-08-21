@@ -16,7 +16,11 @@ USED_RANGE_SUMMARY_FUNCTION = "汇总_任意行汇总"
 FIXED_ROW_SUMMARY_FUNCTION = "汇总_固定行汇总"
 WORKBOOK_TABLE_MERGE_FUNCTION = "汇总_汇总表合并"
 NAMED_RANGE_CHECK_FUNCTION = "检查_命名区域存在性"
-MERGE_ORG_FILES_FUNCTION = "修改_合并同机构多表"
+MERGE_ORG_FILES_FUNCTION = "修改_组合联合核查表"
+MERGE_ORG_FEATURE = "组合联合核查表"
+MERGE_ORG_FLOW = "组合联合核查表"
+_OLD_MERGE_ORG_FUNCTION = "修改_合并同机构多表"
+_OLD_MERGE_ORG_LABEL = "合并同机构多表"
 
 FEATURE_TYPES = (
     EXTERNAL_FILE_FUNCTION,
@@ -63,7 +67,7 @@ DEFAULT_FEATURES = (
     ("任意行汇总", USED_RANGE_SUMMARY_FUNCTION, "任意行汇总区域", "否", "", "模板必须定义同工作表的“表头区域”；“单元格区域.字段名”会附加到每行"),
     ("固定行汇总", FIXED_ROW_SUMMARY_FUNCTION, "固定行汇总区域", "否", "", "模板必须定义同工作表的“表头区域”；严格按框选的固定行汇总"),
     ("汇总表合并", WORKBOOK_TABLE_MERGE_FUNCTION, "", "否", "", "读取所有源工作簿的工作表；表头相同才合并，不同表头分别保留在同一结果工作簿中"),
-    ("合并同机构多表", MERGE_ORG_FILES_FUNCTION, "", "否", "", "把源目录下同一机构（文件名主名下划线第一段相同）的所有工作簿合并为一本，所有工作表集中存放，供制作模板后单独跑汇总核查表校验"),
+    (MERGE_ORG_FEATURE, MERGE_ORG_FILES_FUNCTION, "", "否", "", "把源目录下同一机构（文件名主名下划线第一段相同）的所有工作簿组合为联合核查表"),
 )
 DEFAULT_FLOWS = (
     ("汇总核查表校验", 10, "检查校验区域", "是", "停止", "否", "", "", "先确认公式复制和问题提取所需区域存在"),
@@ -76,7 +80,7 @@ DEFAULT_FLOWS = (
     ("汇总校验结果说明", 20, "检查汇总区域", "是", "停止", "否", "", "", "先确认汇总区域和表头区域存在"),
     ("汇总校验结果说明", 30, "表结构比对", "是", "停止", "否", "", "", "不匹配文件跳过，正常运行只记入运行日志"),
     ("汇总校验结果说明", 40, "任意行汇总", "是", "停止", "是", "汇总校验结果说明", "", "输出正式校验结果与报送说明汇总"),
-    ("合并同机构多表", 10, "合并同机构多表", "是", "停止", "是", "合并同机构多表", "", "递归合并同一机构的多个报送工作簿为一本，输出每机构一个 xlsx"),
+    (MERGE_ORG_FLOW, 10, MERGE_ORG_FEATURE, "是", "停止", "是", MERGE_ORG_FLOW, "", "递归组合同一机构的多个报送工作簿，输出每机构一个联合核查表"),
 )
 # 旧配置迁移时，为“默认最终输出步骤”回填流程名（键 = 流程名, 功能名）。
 DEFAULT_OUTPUT_NAMES = {(row[0], row[2]): row[6] for row in DEFAULT_FLOWS if row[6]}
@@ -93,7 +97,7 @@ GUIDE_COMMENTS: dict[str, dict[int, str]] = {
            "核对_表结构比对：逐格核对固定表头，不匹配的报送文件跳过；\n"
            "修改_外部文件添加：把外部工作表复制进审核副本，须先于公式校验复制；\n"
            "修改_公式校验复制：复制模板公式并强制重算，可输出同名审核副本目录；\n"
-           "修改_合并同机构多表：按文件名第一段识别机构，将同一机构多个工作簿的所有工作表合并为一本；\n"
+           "修改_组合联合核查表：按文件名第一段识别机构，将同一机构多个工作簿组合为一份联合核查表；\n"
            "汇总_公式校验结果提取：重算后提取错误、核实、提示等结果；\n"
            "汇总_任意行汇总 / 汇总_固定行汇总 / 汇总_汇总表合并：区域汇总。",
         3: "模板中要使用的命名区域名，可填多个用、分隔；对应功能按此名称在模板名称管理器中查找。",
@@ -107,8 +111,8 @@ GUIDE_COMMENTS: dict[str, dict[int, str]] = {
         3: "引用“模块化功能”页中的功能名。",
         4: "填“是”才执行该步骤。",
         5: "仅支持“停止”或“跳过”：停止=该步骤出错则中止整个流程；跳过=出错则跳过当前文件继续。",
-        6: "只对会产出实际文件的功能生效：外部文件添加 / 公式校验复制输出同名阶段副本目录、审核副本目录，校验结果提取和合并同机构多表输出实际工作簿；填“否”时这些中间文件处理完即清理。检查类与表结构比对始终只记入运行日志，不受此列影响。",
-        7: "输出文件名（可选）：仅对“是否输出结果=是”且会产出实际文件的步骤生效；填写后，该步骤的输出文件/目录名从“序号_功能名_时间戳”改为“输出文件名_时间戳”。校验结果提取、任意行/固定行/汇总表合并、合并同机构多表等最终结果建议填流程名；外部文件添加、公式校验复制的中间阶段副本默认留空。",
+        6: "只对会产出实际文件的功能生效：外部文件添加 / 公式校验复制输出同名阶段副本目录、审核副本目录，校验结果提取和组合联合核查表输出实际工作簿；填“否”时这些中间文件处理完即清理。检查类与表结构比对始终只记入运行日志，不受此列影响。",
+        7: "输出文件名（可选）：仅对“是否输出结果=是”且会产出实际文件的步骤生效；填写后，该步骤的输出文件/目录名从“序号_功能名_时间戳”改为“输出文件名_时间戳”。校验结果提取、任意行/固定行/汇总表合并、组合联合核查表等最终结果建议填流程名；外部文件添加、公式校验复制的中间阶段副本默认留空。",
         8: "处理对象（可选）：本步骤读哪份数据。留空=源数据目录的报送文件；填流程中排在前面的功能名，则读该功能产出的副本，例如校验结果提取填“公式校验复制”读套了公式的审核副本，填“外部文件添加”读加了外部表的副本；任意行/固定行/汇总表合并填“公式校验复制”可对审核副本做汇总。主流程的校验结果提取预填“公式校验复制”、公式校验复制预填“外部文件添加”。处理对象只认流程中排在前面的外部文件添加/公式校验复制等会产副本的功能；引用不匹配或不产副本的功能（如检查类、核对类）时，自动跳过非副本功能，兜底到最近前一个产副本功能（之前没有则兜底到源数据目录），并在运行日志给出提示，不会中断流程。",
         9: "说明。",
     },
@@ -199,6 +203,11 @@ def initialize_config(config_path: Path) -> Path:
             type_cell = sheet.cell(row_number, 2)
             if _text(name_cell.value) == "公式校验" and _text(type_cell.value) == FORMULA_COPY_FUNCTION:
                 name_cell.value = "公式校验复制"
+            # 仅迁移精确旧名，不保留别名，避免模块目录中同时出现两套同义功能。
+            if _text(name_cell.value) == _OLD_MERGE_ORG_LABEL:
+                name_cell.value = MERGE_ORG_FEATURE
+            if _text(type_cell.value) == _OLD_MERGE_ORG_FUNCTION:
+                type_cell.value = MERGE_ORG_FILES_FUNCTION
         existing_features = {_text(row[0]) for row in sheet.iter_rows(min_row=2, values_only=True)}
         for row in DEFAULT_FEATURES:
             if row[0] not in existing_features:
@@ -265,6 +274,24 @@ def initialize_config(config_path: Path) -> Path:
         for row in flow_sheet.iter_rows(min_row=2):
             if _text(row[2].value) == "公式校验":
                 row[2].value = "公式校验复制"
+            if _text(row[0].value) == _OLD_MERGE_ORG_LABEL:
+                row[0].value = MERGE_ORG_FLOW
+            if _text(row[2].value) == _OLD_MERGE_ORG_LABEL:
+                row[2].value = MERGE_ORG_FEATURE
+            if _text(row[6].value) == _OLD_MERGE_ORG_LABEL:
+                row[6].value = MERGE_ORG_FLOW
+            if _text(row[7].value) == _OLD_MERGE_ORG_LABEL:
+                row[7].value = MERGE_ORG_FEATURE
+        # 旧流程在迁移前可能因“流程名 + 功能名”不同而被补过一条新默认行；
+        # 合并流程本身只能有一个模块，保留原先的首条配置并删去重复默认行。
+        merge_rows = [
+            row_number
+            for row_number in range(2, flow_sheet.max_row + 1)
+            if _text(flow_sheet.cell(row_number, 1).value) == MERGE_ORG_FLOW
+            and _text(flow_sheet.cell(row_number, 3).value) == MERGE_ORG_FEATURE
+        ]
+        for row_number in reversed(merge_rows[1:]):
+            flow_sheet.delete_rows(row_number, 1)
         for cell in flow_sheet[1]:
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill("solid", fgColor="1F4E78")
@@ -293,6 +320,11 @@ def initialize_config(config_path: Path) -> Path:
         if not any(cell.value for cell in custom_sheet[1]):
             for column, header in enumerate(CUSTOM_FEATURE_HEADERS, start=1):
                 custom_sheet.cell(row=1, column=column, value=header)
+        for row in custom_sheet.iter_rows(min_row=2):
+            if _text(row[0].value) == _OLD_MERGE_ORG_LABEL:
+                row[0].value = MERGE_ORG_FLOW
+            if _text(row[1].value) == _OLD_MERGE_ORG_LABEL:
+                row[1].value = MERGE_ORG_FLOW
         for cell in custom_sheet[1]:
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill("solid", fgColor="1F4E78")

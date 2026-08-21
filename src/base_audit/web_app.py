@@ -14,7 +14,7 @@ from .discovery import (
     recommend_template,
 )
 from .history import organize_history_rule_numbers
-from .name_config import initialize_config, reset_default_configuration
+from .name_config import MERGE_ORG_FLOW, initialize_config, reset_default_configuration
 from .service import AuditService
 from .settings import SettingsStore
 
@@ -43,6 +43,7 @@ class WebApi:
             "outputAuto": not self.settings.output_pinned,
             "outputPinned": self.settings.output_pinned,
             "recursive": self.settings.recursive_folders,
+            "writeFlowLogs": self.settings.write_flow_logs,
             "sourceFiles": [],
             "selectedFiles": [],
             "mixedTemplates": [],
@@ -309,6 +310,11 @@ class WebApi:
             else getattr(webview, "OPEN_DIALOG")
         )
         base_dir = self.state.get("templateDir") or self.project_root
+        self.state["status"] = "第 1 步：请选择基准模板"
+        self._log(
+            "第 1 步/2：请选择基准模板（它会另存为联合模板；"
+            "应包含集中系统数据、参照表等公共依赖工作表）"
+        )
         selected_base = webview.windows[0].create_file_dialog(
             open_dialog,
             directory=str(base_dir),
@@ -318,6 +324,11 @@ class WebApi:
             self._log("已取消制作联合模板：未选择底稿模板")
             return False
         base_template = Path(selected_base[0]).resolve()
+        self.state["status"] = "第 2 步：请选择要并入的模板"
+        self._log(
+            f"已选择基准模板：{base_template.name}。第 2 步/2："
+            "请批量选择要并入的其他模板（不要重复选择基准模板）"
+        )
         selected_sources = webview.windows[0].create_file_dialog(
             open_dialog,
             directory=str(base_template.parent),
@@ -397,6 +408,13 @@ class WebApi:
             if changed:
                 # 复选框直接决定待审核清单的扫描范围；不触发模板自动改写。
                 self._recognize(allow_template_auto=False)
+        if "writeFlowLogs" in values:
+            value = values["writeFlowLogs"]
+            self.state["writeFlowLogs"] = (
+                value if isinstance(value, bool)
+                else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
+            )
+            self._save_settings()
         return self.state
 
     def recognize(self) -> dict[str, Any]:
@@ -499,7 +517,7 @@ class WebApi:
                     flow_name = action[len("flow:"):]
                 else:
                     flow_name = "汇总校验结果说明"
-                merge_org_flow = flow_name == "合并同机构多表"
+                merge_org_flow = flow_name == MERGE_ORG_FLOW
                 if merge_org_flow:
                     self._log(f"当前流程：{flow_name}；仅使用源数据目录")
                 else:
@@ -513,6 +531,7 @@ class WebApi:
                     history_path=self.project_root / "data" / "config.xlsx", selected_files=selected,
                     external_path=None if merge_org_flow else (Path(self.state["external"]) if self.state["external"] else None),
                     recursive=bool(self.state["recursive"]), on_step=self._log_detail, strict=strict,
+                    write_flow_logs=bool(self.state["writeFlowLogs"]),
                 )
             self.state["status"] = result.summary_text().splitlines()[0]
             self._log(result.summary_text())
@@ -564,6 +583,7 @@ class WebApi:
         self.settings.last_output_dir = self.state["output"]
         self.settings.output_pinned = bool(self.state["outputPinned"])
         self.settings.recursive_folders = bool(self.state["recursive"])
+        self.settings.write_flow_logs = bool(self.state["writeFlowLogs"])
         self.settings_store.save(self.settings)
 
 

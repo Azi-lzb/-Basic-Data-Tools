@@ -253,6 +253,7 @@ class AuditService:
         recursive: bool = True,
         on_step: Optional[Callable[[str], None]] = None,
         strict: bool = True,
+        write_flow_logs: bool = True,
     ) -> "AuditRunResult | RegionSummaryResult | PreflightRunResult":
         """Execute one configured flow; its steps are the single source of truth.
 
@@ -263,7 +264,7 @@ class AuditService:
         steps = load_flow_steps(self.config_path, flow_name)
         if not steps:
             raise ValueError(f"执行流程“{flow_name}”不存在，或没有启用的功能")
-        # “合并同机构多表”不使用模板；给配置读取一个占位文件名只是为了
+        # “组合联合核查表”不使用模板；给配置读取一个占位文件名只是为了
         # 沿用模块化功能的加载逻辑，不会打开或访问该路径。
         mapping_template = template_path or Path("__无需模板__.xlsx")
         mappings = {item.name: item for item in load_feature_mappings(self.config_path, mapping_template)}
@@ -294,7 +295,7 @@ class AuditService:
         named_range_mappings = tuple(mapping for _, mapping in named_range_steps)
         executable_types = feature_types - {NAMED_RANGE_CHECK_FUNCTION}
         if MERGE_ORG_FILES_FUNCTION in executable_types and executable_types != {MERGE_ORG_FILES_FUNCTION}:
-            raise ValueError("“合并同机构多表”必须单独成一个流程，不能与其他功能混用")
+            raise ValueError("“组合联合核查表”必须单独成一个流程，不能与其他功能混用")
         if executable_types != {MERGE_ORG_FILES_FUNCTION} and (
             template_path is None or not template_path.is_file()
         ):
@@ -316,7 +317,7 @@ class AuditService:
             )
         # 一个流程生成一份运行日志 xlsx，每个功能一个 sheet；“是否输出结果”
         # 只决定外部文件添加/公式校验/校验结果提取的实际文件是否保留。
-        feature_log = FeatureLog(flow_name, output_dir)
+        feature_log = FeatureLog(flow_name, output_dir) if write_flow_logs else None
         try:
             if executable_types == {MERGE_ORG_FILES_FUNCTION}:
                 merge_steps = [
@@ -324,10 +325,10 @@ class AuditService:
                     if mappings[step.feature_name].feature_type == MERGE_ORG_FILES_FUNCTION
                 ]
                 if len(merge_steps) != 1:
-                    raise ValueError("“合并同机构多表”流程必须且只能启用一个合并模块")
+                    raise ValueError("“组合联合核查表”流程必须且只能启用一个合并模块")
                 merge_step, merge_mapping = merge_steps[0]
                 if not merge_step.output_result:
-                    raise ValueError("“合并同机构多表”必须填写“是否输出结果=是”")
+                    raise ValueError("“组合联合核查表”必须填写“是否输出结果=是”")
                 result = self.merge_org_files(
                     input_dir=input_dir,
                     output_dir=output_dir,
@@ -455,14 +456,15 @@ class AuditService:
                     on_step=on_step, feature_log=feature_log, strict=strict,
                     effective_sources=effective_sources,
                 )
-            log_path = feature_log.write()
+            log_path = feature_log.write() if feature_log is not None else None
             if log_path is not None and result is not None:
                 result = replace(result, log_path=log_path)
             return result
         except Exception:
             # 流程中途失败时也写一份已收集 sheet 的运行日志，便于排错。
             try:
-                feature_log.write()
+                if feature_log is not None:
+                    feature_log.write()
             except Exception:
                 pass
             raise

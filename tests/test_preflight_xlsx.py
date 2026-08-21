@@ -68,6 +68,23 @@ class PreflightXlsxTests(unittest.TestCase):
         self.assertTrue(result.matched)
         self.assertEqual(1, result.checked_labels)
 
+    def test_merged_cell_subordinate_uses_merged_anchor_value(self):
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        source = Path(folder.name) / "source.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "贷款明细"
+        sheet.merge_cells("A1:B1")
+        sheet["A1"] = "合并表头"
+        workbook.save(source)
+        workbook.close()
+        area = CopyRange("贷款明细", "B1")
+        definition = TemplateDefinition([], [CopyRange("贷款明细", "A1")], False, [area])
+        result = validate_source_xlsx(source, definition, [(area, [["合并表头"]])])
+        self.assertTrue(result.matched)
+        self.assertEqual(1, result.matched_labels)
+
     def test_structure_details_keep_sheet_name_and_cell_address(self):
         with TemporaryDirectory() as folder:
             root = Path(folder)

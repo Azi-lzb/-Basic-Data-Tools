@@ -120,10 +120,10 @@ class ConfigHistoryTests(unittest.TestCase):
     def test_default_merge_org_flow_is_a_single_output_step(self):
         with TemporaryDirectory() as folder:
             config = initialize_config(Path(folder) / "config.xlsx")
-            steps = load_flow_steps(config, "合并同机构多表")
-        self.assertEqual(("合并同机构多表",), tuple(step.feature_name for step in steps))
+            steps = load_flow_steps(config, "组合联合核查表")
+        self.assertEqual(("组合联合核查表",), tuple(step.feature_name for step in steps))
         self.assertTrue(steps[0].output_result)
-        self.assertEqual("合并同机构多表", steps[0].output_name)
+        self.assertEqual("组合联合核查表", steps[0].output_name)
 
     def test_default_explanation_flow_checks_structure_before_summary(self):
         with TemporaryDirectory() as folder:

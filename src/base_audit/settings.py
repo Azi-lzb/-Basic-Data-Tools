@@ -22,6 +22,7 @@ class UserSettings:
     last_output_dir: str = ""
     output_pinned: bool = False
     recursive_folders: bool = True
+    write_flow_logs: bool = True
     favorite_input_dirs: list[FavoritePath] = field(default_factory=list)
     favorite_template_dirs: list[FavoritePath] = field(default_factory=list)
     favorite_external_files: list[FavoritePath] = field(default_factory=list)
@@ -65,6 +66,8 @@ class SettingsStore:
             output_pinned=bool(payload.get("output_pinned", legacy_pinned)),
             # 说明报送文件通常按机构放在子目录，默认保持递归发现。
             recursive_folders=bool(payload.get("recursive_folders", True)),
+            # 流程运行日志默认保留；用户熟悉流程后可从设置面板关闭。
+            write_flow_logs=bool(payload.get("write_flow_logs", True)),
             favorite_input_dirs=self._favorites(payload.get("favorite_input_dirs")),
             favorite_template_dirs=self._favorites(
                 payload.get("favorite_template_dirs")

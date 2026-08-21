@@ -28,8 +28,16 @@ WORKBOOK_XML = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </workbook>"""
 
 
-def make_xlsx(path: Path, sheet_name: str = "数据表") -> None:
-    xml = WORKBOOK_XML.replace("数据表", sheet_name)
+def make_xlsx(path: Path, *sheet_names: str) -> None:
+    names = sheet_names or ("数据表",)
+    sheets = "".join(
+        f'<sheet name="{name}" sheetId="{index}"/>'
+        for index, name in enumerate(names, start=1)
+    )
+    xml = WORKBOOK_XML.replace(
+        '<sheets><sheet name="数据表" sheetId="1"/></sheets>',
+        f"<sheets>{sheets}</sheets>",
+    )
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("xl/workbook.xml", xml)
 
@@ -128,6 +136,29 @@ class DiscoveryTests(unittest.TestCase):
         self.assertTrue(result.matched)
         self.assertEqual(result.template_path.name, "！金融基础数据-单位贷款202606.xlsx")
 
+    def test_combined_workbook_is_matched_by_sheet_set_not_filename(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            template_dir = root / "templates"
+            input_dir = root / "input"
+            template_dir.mkdir()
+            input_dir.mkdir()
+            make_xlsx(template_dir / "！个人贷款模板.xlsx", "个人贷款", "个人客户")
+            make_xlsx(template_dir / "！单位贷款模板.xlsx", "单位贷款", "单位客户")
+            make_xlsx(
+                template_dir / "！任意名称.xlsx",
+                "个人贷款", "个人客户", "单位贷款", "单位客户", "集中系统数据", "参照表",
+            )
+            make_xlsx(
+                input_dir / "机构A_合并_2026-07-31.xlsx",
+                "个人贷款", "个人客户", "单位贷款", "单位客户",
+            )
+            result = recommend_template(template_dir, input_dir, root / "index.json")
+        self.assertTrue(result.matched)
+        self.assertEqual(result.template_path.name, "！任意名称.xlsx")
+        self.assertIn("工作表集合匹配率", result.details)
+        self.assertIn("前三候选", result.details)
+
     def test_mixed_reports_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -163,6 +194,7 @@ class SettingsTests(unittest.TestCase):
                 ),
                 recent_input_dirs=values,
                 recent_template_dirs=[str(root / "模板")],
+                write_flow_logs=False,
             )
             store = SettingsStore(root / "用户设置.json")
             store.save(settings)
@@ -173,6 +205,7 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(loaded.last_template_dir.endswith("模板"))
         self.assertTrue(loaded.last_external_file.endswith("外部数据.xlsx"))
         self.assertFalse(loaded.output_pinned)
+        self.assertFalse(loaded.write_flow_logs)
         self.assertEqual(len(loaded.recent_template_dirs), 1)
         self.assertEqual(len(loaded.recent_input_dirs), 10)
         self.assertTrue(loaded.recent_input_dirs[0].endswith("11"))

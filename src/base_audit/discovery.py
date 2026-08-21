@@ -258,11 +258,20 @@ def _filename_score(report_name: str, source_stem: str) -> float:
 
 
 def _sheet_score(template_sheets: tuple[str, ...], source_sheets: tuple[str, ...]) -> float:
+    """Score template candidates by worksheet-set compatibility only.
+
+    Source sheets must be covered by the template.  Templates may additionally
+    contain helper sheets such as ``集中系统数据`` and ``参照表``; those reduce
+    the score slightly but do not prevent a combined workbook from matching.
+    """
     expected = {name for name in template_sheets if name != "审核规则"}
     actual = set(source_sheets)
     if not expected or not actual:
         return 0.0
-    return len(expected & actual) / len(expected)
+    common = len(expected & actual)
+    source_coverage = common / len(actual)
+    template_precision = common / len(expected)
+    return 0.8 * source_coverage + 0.2 * template_precision
 
 
 def _candidate_text(
@@ -270,7 +279,7 @@ def _candidate_text(
 ) -> str:
     """Short, actionable candidate explanation for the workbench log."""
     return "；".join(
-        f"{Path(profile.path).name}（文件名 {name_score:.0%}，工作表 {sheet_score:.0%}）"
+        f"{Path(profile.path).name}（工作表集合 {sheet_score:.0%}）"
         for _, profile, name_score, sheet_score in scores[:3]
     )
 
@@ -297,15 +306,14 @@ def recommend_template(
         ranked = sorted(
             (
                 (
-                    0.65 * _filename_score(item.report_name, source.stem)
-                    + 0.35 * _sheet_score(item.sheet_names, source_sheets),
+                    _sheet_score(item.sheet_names, source_sheets),
                     item.path,
                 )
                 for item in profiles
             ),
             reverse=True,
         )
-        if ranked and ranked[0][0] >= 0.82:
+        if ranked and ranked[0][0] >= 0.90:
             if len(ranked) == 1 or ranked[0][0] - ranked[1][0] >= 0.04:
                 per_file_choices.add(ranked[0][1])
     if len(per_file_choices) > 1:
@@ -319,14 +327,9 @@ def recommend_template(
     source_sheets = read_xlsx_sheet_names(files[0])
     scores: list[tuple[float, TemplateProfile, float, float]] = []
     for profile in profiles:
-        name_score = sum(
-            _filename_score(profile.report_name, path.stem) for path in files
-        ) / len(files)
+        name_score = 0.0
         sheets_score = _sheet_score(profile.sheet_names, source_sheets)
-        # Source filenames occasionally omit the report type, while business
-        # sheet names are normally stable. Give sheet structure enough weight
-        # to resolve those cases without trusting it alone.
-        total = 0.65 * name_score + 0.35 * sheets_score
+        total = sheets_score
         scores.append((total, profile, name_score, sheets_score))
     scores.sort(key=lambda item: item[0], reverse=True)
     top_total, top, name_score, sheets_score = scores[0]
@@ -340,15 +343,16 @@ def recommend_template(
         and (len(scores) == 1 or sheets_score - scores[1][3] >= 0.20)
     )
     unique_enough = top_total - runner_up >= 0.05 or structure_decisive
-    matched = top_total >= 0.72 and unique_enough
+    matched = top_total >= 0.90 and unique_enough
     if matched:
         details = (
-            f"自动匹配：{Path(top.path).name}（按源文件名称和工作表名称辅助判断）"
+            f"自动匹配：{Path(top.path).name}（工作表集合匹配率 {top_total:.0%}，"
+            f"取最高匹配率候选；前三候选：{_candidate_text(scores)}）"
         )
         return TemplateSuggestion(
             Path(top.path), top_total, True, details, alternatives
         )
-    if top_total >= 0.62 and not unique_enough:
+    if top_total >= 0.80 and not unique_enough:
         details = "有多个相近模板，已停止自动选择，请手动确认。候选：" + _candidate_text(scores)
     else:
         details = "未找到可信度足够的模板，请手动选择"
@@ -366,10 +370,10 @@ def classify_source_files(
         ranked: list[tuple[float, TemplateProfile]] = []
         source_sheets = read_xlsx_sheet_names(path)
         for profile in profiles:
-            score = 0.85 * _filename_score(profile.report_name, path.stem) + 0.15 * _sheet_score(profile.sheet_names, source_sheets)
+            score = _sheet_score(profile.sheet_names, source_sheets)
             ranked.append((score, profile))
         ranked.sort(key=lambda item: item[0], reverse=True)
-        if ranked and ranked[0][0] >= 0.72:
+        if ranked and ranked[0][0] >= 0.90:
             template_name = Path(ranked[0][1].path).name
         else:
             template_name = "未识别"

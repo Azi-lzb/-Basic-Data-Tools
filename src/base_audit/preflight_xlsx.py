@@ -14,6 +14,44 @@ from .models import CopyRange, PreflightItem, SourceMatch, StructureCheck, Templ
 STRUCTURE_MATCH_THRESHOLD = 0.90
 
 
+def _merged_anchor_lookup(
+    workbook: Any, sheet_name: str, requested: set[tuple[int, int]]
+) -> dict[tuple[int, int], tuple[int, int]]:
+    """Resolve requested cells inside merged ranges to their top-left anchors.
+
+    Read-only openpyxl worksheets intentionally do not expose ``merged_cells``.
+    Parsing only the sheet's merge definitions preserves the stream-reading hot
+    path while making its values agree with Excel COM's ``Range.Value2``.
+    """
+    if not requested:
+        return {}
+    sheet = workbook[sheet_name]
+    archive = getattr(workbook, "_archive", None)
+    sheet_path = getattr(sheet, "_worksheet_path", "")
+    if archive is None or not sheet_path:
+        return {}
+    try:
+        from xml.etree import ElementTree
+
+        root = ElementTree.fromstring(archive.read(sheet_path))
+    except Exception:
+        return {}
+    anchors: dict[tuple[int, int], tuple[int, int]] = {}
+    for element in root.iter():
+        if element.tag.rsplit("}", 1)[-1] != "mergeCell":
+            continue
+        ref = element.attrib.get("ref", "")
+        try:
+            min_col, min_row, max_col, max_row = range_boundaries(ref)
+        except ValueError:
+            continue
+        anchor = (min_row, min_col)
+        for row, col in requested:
+            if min_row <= row <= max_row and min_col <= col <= max_col:
+                anchors[(row, col)] = anchor
+    return anchors
+
+
 def template_structure_values(template_workbook: Any, definition: TemplateDefinition) -> list[tuple[CopyRange, list[list[Any]]]]:
     """Read template labels in bulk once; source workbooks never need COM."""
     values: list[tuple[CopyRange, list[list[Any]]]] = []
@@ -54,12 +92,34 @@ def validate_source_xlsx(
         checks: list[StructureCheck] = []
         range_specs: list[tuple[CopyRange, list[list[Any]], tuple[int, int, int, int]]] = []
         bounds_by_sheet: dict[str, list[tuple[int, int, int, int]]] = defaultdict(list)
+        requested_by_sheet: dict[str, set[tuple[int, int]]] = defaultdict(set)
         for item, expected_values in expected_ranges:
             if item.sheet_name not in source_names:
                 return SourceMatch(False, 0.0, 0, 0, (item.sheet_name,), "缺少模板要求的工作表：" + item.sheet_name)
             bounds = range_boundaries(item.address)
             range_specs.append((item, expected_values, bounds))
             bounds_by_sheet[item.sheet_name].append(bounds)
+            min_col, min_row, max_col, max_row = bounds
+            for row_index in range(max_row - min_row + 1):
+                expected_row = expected_values[row_index] if row_index < len(expected_values) else []
+                for column_index in range(max_col - min_col + 1):
+                    expected_value = expected_row[column_index] if column_index < len(expected_row) else None
+                    if not _is_blank(expected_value):
+                        requested_by_sheet[item.sheet_name].add(
+                            (min_row + row_index, min_col + column_index)
+                        )
+
+        merged_anchors = {
+            sheet_name: _merged_anchor_lookup(workbook, sheet_name, requested)
+            for sheet_name, requested in requested_by_sheet.items()
+        }
+        # An expected cell can be inside a merge whose anchor is outside the
+        # named region. Read that anchor as a compact one-cell batch as well.
+        for sheet_name, anchors in merged_anchors.items():
+            for anchor_row, anchor_col in set(anchors.values()):
+                bounds_by_sheet[sheet_name].append(
+                    (anchor_col, anchor_row, anchor_col, anchor_row)
+                )
 
         # Read each compact bounding batch once.  Sparse, distant areas stay in
         # separate batches so a few named cells cannot force a whole sheet read.
@@ -82,12 +142,15 @@ def validate_source_xlsx(
                     expected_value = expected_row[column_index] if column_index < len(expected_row) else None
                     if _is_blank(expected_value):
                         continue
-                    actual_value = source_values.get(
-                        (item.sheet_name, min_row + row_index, min_col + column_index)
+                    row_number = min_row + row_index
+                    column_number = min_col + column_index
+                    actual_row, actual_col = merged_anchors.get(item.sheet_name, {}).get(
+                        (row_number, column_number), (row_number, column_number)
                     )
+                    actual_value = source_values.get((item.sheet_name, actual_row, actual_col))
                     checked += 1
                     is_match = _structure_values_equal(expected_value, actual_value)
-                    cell = f"{_column_letter(min_col + column_index)}{min_row + row_index}"
+                    cell = f"{_column_letter(column_number)}{row_number}"
                     checks.append(
                         StructureCheck(
                             item.sheet_name, cell, _display_value(expected_value),
