@@ -70,7 +70,7 @@ def source_workbooks(input_dir: Path, *, recursive: bool = False) -> list[Path]:
         path
         for path in iterator
         if path.suffix.lower() in SOURCE_SUFFIXES
-        and not path.name.startswith(("~$", "!", "！"))
+        and not path.name.startswith("~$")
         and "_审核版" not in path.stem
         and not is_skipped_input_path(path.relative_to(input_dir).parts[:-1])
     )
@@ -99,7 +99,7 @@ def explanation_files(input_dir: Path, *, recursive: bool = False) -> list[Path]
         if path.is_file()
         and path.suffix.lower() not in SOURCE_SUFFIXES
         and path.suffix.lower() not in NON_XLSX_SKIPPED_SUFFIXES
-        and not path.name.startswith(("~$", "!", "！", "."))
+        and not path.name.startswith(("~$", "."))
         and not is_skipped_input_path(path.relative_to(input_dir).parts[:-1])
     )
 
@@ -170,7 +170,7 @@ class TemplateCatalog:
         cached = {} if force else self._load_index()
         profiles: list[TemplateProfile] = []
         for path in sorted(self.template_dir.glob("*.xlsx")):
-            if not path.name.startswith(("!", "！")):
+            if path.name.startswith("~$"):
                 continue
             stat = path.stat()
             key = str(path.resolve())

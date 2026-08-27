@@ -21,11 +21,12 @@ echo Building Win7 x86 package with HZPBCwin7x86 ...
 "%CONDA_EXE%" run -n HZPBCwin7x86 python -m PyInstaller --clean --noconfirm --distpath "dist" --workpath "build\win7_x86" "%SPEC_FILE%"
 if errorlevel 1 goto :build_error
 
+rem Keep the PyInstaller output ASCII, then rename it after packaging.
+"%CONDA_EXE%" run -n HZPBCwin7x86 python "tools\finalize_win7_build.py" x86
+if errorlevel 1 goto :rename_error
+
 for %%O in ("%CD%\dist\*_Win7_x86.exe") do set "OUTPUT_FILE=%%~fO"
 if not defined OUTPUT_FILE goto :output_error
-if not exist "dist\data" mkdir "dist\data"
-if not exist "dist\data\config.xlsx" copy /y "data\config.xlsx" "dist\data\config.xlsx" >nul
-for %%F in (*.docx) do copy /y "%%~fF" "dist\" >nul
 
 echo.
 echo Build completed. See dist\*_Win7_x86.exe
@@ -42,6 +43,9 @@ echo ERROR: Win7 x86 spec file was not found.
 goto :end_fail
 :build_error
 echo ERROR: Win7 x86 package build failed. Read the messages above.
+goto :end_fail
+:rename_error
+echo ERROR: Win7 x86 package was built but could not be renamed.
 goto :end_fail
 :output_error
 echo ERROR: EXE was not generated.

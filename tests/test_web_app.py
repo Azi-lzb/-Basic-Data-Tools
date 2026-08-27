@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from base_audit.web_app import WebApi
+from base_audit.name_config import initialize_config
 
 
 class _Window:
@@ -76,6 +78,33 @@ class WebAppCompatibilityTests(unittest.TestCase):
         api = WebApi(ROOT)
         api.update({"input": "C:/报送目录", "outputPinned": False})
         self.assertEqual(api.state["output"], str(Path("C:/报送目录") / "执行结果"))
+
+    def test_calculation_engine_setting_is_persisted_in_state(self) -> None:
+        with TemporaryDirectory() as folder:
+            api = WebApi(Path(folder))
+            api.update({"calculationEngine": "WPS 表格"})
+            self.assertEqual("WPS 表格", api.state["calculationEngine"])
+            api.update({"calculationEngine": "不存在的引擎"})
+            self.assertEqual("WPS 表格", api.state["calculationEngine"])
+
+    def test_history_page_is_paginated_and_filterable(self) -> None:
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            config = root / "历史审核说明.xlsx"
+            initialize_config(config)
+            from openpyxl import load_workbook
+            workbook = load_workbook(config)
+            sheet = workbook["历史审核结果"]
+            sheet.append(("机构A.xlsx", "贷款表", "A1", "错误", "余额", "余额异常", "10", "8", "2", "规则A", "说明A", "通过"))
+            sheet.append(("机构B.xlsx", "贷款表", "B2", "软性", "利率", "利率核实", "", "", "", "规则B", "说明B", "待核实"))
+            workbook.save(config)
+            workbook.close()
+            api = WebApi(root)
+            result = api.get_history_page({"page": 1, "pageSize": 10, "keyword": "余额", "errorType": "错误"})
+        self.assertEqual(1, result["total"])
+        self.assertEqual("机构A.xlsx", result["items"][0]["工作簿名"])
+        self.assertIn("软性", result["errorTypes"])
+        self.assertIn("通过", result["opinions"])
 
     def test_flow_start_logs_before_background_worker_for_win7_compatibility(self) -> None:
         api = WebApi(ROOT)

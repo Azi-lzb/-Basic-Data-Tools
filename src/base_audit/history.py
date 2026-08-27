@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
-from dataclasses import dataclass
 from pathlib import Path
-import re
 from typing import Iterable
 
 from .models import Issue
@@ -24,66 +22,6 @@ HISTORY_HEADERS = (
     "历史校验说明",
     "审核意见",
 )
-
-
-@dataclass(frozen=True)
-class HistoryRuleReindexResult:
-    total_rows: int
-    affected_groups: int
-    changed_rows: int
-
-    def summary_text(self) -> str:
-        return (
-            f"已检查 {self.total_rows} 条历史审核结果；"
-            f"已去除 {self.changed_rows} 条旧规则编号末尾的序号。"
-        )
-
-
-def organize_history_rule_numbers(config_path: Path) -> HistoryRuleReindexResult:
-    """Remove legacy serial suffixes from history rule identifiers.
-
-    A rule is identified by workbook, sheet, formula cell and indicator.  One
-    rule may have multiple manual history rows; their explanations and opinions
-    are combined when carried into the current audit result.
-    """
-    from openpyxl import load_workbook
-
-    if not config_path.is_file():
-        raise FileNotFoundError(f"配置文件不存在：{config_path}")
-    workbook = load_workbook(config_path)
-    try:
-        if "历史审核结果" not in workbook.sheetnames:
-            raise ValueError("配置文件中没有“历史审核结果”工作表")
-        sheet = workbook["历史审核结果"]
-        headers = [str(cell.value or "").strip() for cell in sheet[1]]
-        missing = [name for name in ("规则编号",) if name not in headers]
-        if missing:
-            raise ValueError("历史审核结果缺少列：" + "、".join(missing))
-        rule_column = headers.index("规则编号") + 1
-        total_rows = 0
-        affected_rule_ids: set[str] = set()
-        changed_rows = 0
-        for row_number in range(2, sheet.max_row + 1):
-            rule_id = str(sheet.cell(row_number, rule_column).value or "").strip()
-            if not rule_id:
-                continue
-            total_rows += 1
-            match = re.fullmatch(r"(.+)｜\d+", rule_id)
-            if not match:
-                continue
-            sheet.cell(row_number, rule_column).value = match.group(1)
-            affected_rule_ids.add(match.group(1))
-            changed_rows += 1
-        if changed_rows:
-            try:
-                workbook.save(config_path)
-            except PermissionError as exc:
-                raise RuntimeError(
-                    f"无法保存历史审核结果：请先关闭“{config_path.name}”后重试"
-                ) from exc
-        return HistoryRuleReindexResult(total_rows, len(affected_rule_ids), changed_rows)
-    finally:
-        workbook.close()
 
 
 def _period_key(value: str) -> tuple[int, int, str]:

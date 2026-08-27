@@ -52,7 +52,8 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
 exe = EXE(
     pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
-    name="基础数据审核工具_Win7_x86",
+    # See the x64 spec: use an ASCII staging name for PyInstaller 4 / pefile.
+    name="BaseAuditTool_Win7_x86",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

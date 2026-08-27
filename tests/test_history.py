@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import sys
-import tempfile
 import unittest
 from pathlib import Path
-
-from openpyxl import Workbook, load_workbook
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +12,6 @@ from base_audit.history import (
     HISTORY_HEADERS,
     classify_current_issues,
     merge_history,
-    organize_history_rule_numbers,
 )
 from base_audit.excel_com import ExcelSession
 from base_audit.models import Issue
@@ -132,30 +128,6 @@ class HistoryTests(unittest.TestCase):
         item.institution_feedback = "1.历史说明"
         item.auditor_opinion = "1.审核通过"
         self.assertEqual(len(ExcelSession._issue_history_row(item)), len(HISTORY_HEADERS))
-
-    def test_organize_history_rule_numbers_removes_legacy_serials(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "config.xlsx"
-            workbook = Workbook()
-            sheet = workbook.active
-            sheet.title = "历史审核结果"
-            sheet.append(HISTORY_HEADERS)
-            prefix = "个人贷款｜贷款信息｜T26｜贷款余额"
-            sheet.append(["", "", "", "", "", "", "", "", "问题甲", prefix + "｜1", "说明甲", "意见甲"])
-            sheet.append(["", "", "", "", "", "", "", "", "问题乙", prefix + "｜1", "说明乙", "意见乙"])
-            sheet.append(["", "", "", "", "", "", "", "", "问题丙", prefix + "｜3", "说明丙", "意见丙"])
-            workbook.save(path)
-            workbook.close()
-
-            result = organize_history_rule_numbers(path)
-            self.assertEqual((result.affected_groups, result.changed_rows), (1, 3))
-            check = load_workbook(path, data_only=True)
-            try:
-                rows = list(check["历史审核结果"].iter_rows(min_row=2, values_only=True))
-                self.assertEqual([row[9] for row in rows], [prefix, prefix, prefix])
-                self.assertEqual([row[10] for row in rows], ["说明甲", "说明乙", "说明丙"])
-            finally:
-                check.close()
 
 
 if __name__ == "__main__":

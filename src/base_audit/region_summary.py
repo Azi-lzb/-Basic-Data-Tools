@@ -92,7 +92,7 @@ def _source_files(
     iterator = input_dir.rglob("*.xlsx") if recursive else input_dir.glob("*.xlsx")
     discovered = sorted(
         path for path in iterator
-        if not path.name.startswith(("~$", "!", "！")) and "_审核版" not in path.stem
+        if not path.name.startswith("~$") and "_审核版" not in path.stem
     )
     # 说明报送目录常在根目录保留上一版“汇总信息.xlsx”，而机构文件放在
     # 子目录中。存在子目录文件时优先使用它们，避免把历史汇总再次汇总。
@@ -240,6 +240,7 @@ def run_region_summaries(
     output_name: str | None = None,
     feature_log: Optional[FeatureLog] = None,
     copies_dir: Path | None = None,
+    engine_preference: str = "自动",
 ) -> RegionSummaryResult:
     template_path, input_dir, output_dir = template_path.resolve(), input_dir.resolve(), output_dir.resolve()
     features = load_feature_mappings(config_path, template_path)
@@ -263,7 +264,7 @@ def run_region_summaries(
     output_path = output_dir / f"{output_name or _output_filename_prefix(flow_name)}_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
     items: list[RegionSummaryItem] = []
 
-    with ExcelSession() as excel:
+    with ExcelSession(engine_preference) as excel:
         if on_step is not None:
             on_step(f"已连接表格引擎：{excel.engine_name}")
         template = excel.open_workbook(template_path, read_only=True)

@@ -123,6 +123,8 @@ class Issue:
     detail: str = ""
     institution_feedback: str = ""
     auditor_opinion: str = ""
+    # 仅供本期结果显示使用：条件格式触发后的 Excel COM 色值。
+    display_fill_color: int | None = None
 
     def clone(self, **changes: Any) -> "Issue":
         return replace(self, **changes)

@@ -6,6 +6,8 @@ reference/
 data/*
 !data/config.xlsx
 chatHistory/
+历史审核说明.xlsx
+dist/历史审核说明.xlsx
 
 # 打包产物：dist（可直接运行的成品 EXE）放行，build（中间产物）不上传
 build/
@@ -24,3 +26,4 @@ Thumbs.db
 .DS_Store
 .idea/
 .vscode/
+.claude/

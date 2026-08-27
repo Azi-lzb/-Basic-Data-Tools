@@ -1,11 +1,34 @@
 from __future__ import annotations
 
 import json
+import os
+import ctypes
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
 MAX_RECENT_PATHS = 10
+CALCULATION_ENGINES = ("自动", "Microsoft Excel", "WPS 表格")
+
+
+def hide_application_data_directory(path: Path) -> None:
+    """Hide the application-managed JSON directory on Windows when possible.
+
+    This is presentation-only: failure to set the attribute must never prevent
+    the audit tool from reading or saving user settings.
+    """
+    if os.name != "nt" or not path.is_dir():
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32
+        attributes = kernel32.GetFileAttributesW(str(path))
+        if attributes == 0xFFFFFFFF:
+            return
+        hidden = 0x02
+        if not attributes & hidden:
+            kernel32.SetFileAttributesW(str(path), attributes | hidden)
+    except (AttributeError, OSError):
+        pass
 
 
 @dataclass(frozen=True)
@@ -22,7 +45,9 @@ class UserSettings:
     last_output_dir: str = ""
     output_pinned: bool = False
     recursive_folders: bool = True
-    write_flow_logs: bool = True
+    write_flow_logs: bool = False
+    calculation_engine: str = "自动"
+    show_custom_features: bool = False
     favorite_input_dirs: list[FavoritePath] = field(default_factory=list)
     favorite_template_dirs: list[FavoritePath] = field(default_factory=list)
     favorite_external_files: list[FavoritePath] = field(default_factory=list)
@@ -66,8 +91,15 @@ class SettingsStore:
             output_pinned=bool(payload.get("output_pinned", legacy_pinned)),
             # 说明报送文件通常按机构放在子目录，默认保持递归发现。
             recursive_folders=bool(payload.get("recursive_folders", True)),
-            # 流程运行日志默认保留；用户熟悉流程后可从设置面板关闭。
-            write_flow_logs=bool(payload.get("write_flow_logs", True)),
+            # 运行日志可随时在设置中心开启；默认不额外生成日志工作簿。
+            write_flow_logs=bool(payload.get("write_flow_logs", False)),
+            calculation_engine=(
+                str(payload.get("calculation_engine") or "自动")
+                if str(payload.get("calculation_engine") or "自动") in CALCULATION_ENGINES
+                else "自动"
+            ),
+            # 自定义流程入口默认收起，避免主界面堆积低频按钮。
+            show_custom_features=bool(payload.get("show_custom_features", False)),
             favorite_input_dirs=self._favorites(payload.get("favorite_input_dirs")),
             favorite_template_dirs=self._favorites(
                 payload.get("favorite_template_dirs")

@@ -80,7 +80,10 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="基础数据审核工具_Win7",
+    # PyInstaller 4 / pefile in the Python 3.7 Win7 build environment cannot
+    # reliably write a Chinese EXE name.  The batch finalizer renames this
+    # ASCII staging file to the public Chinese name after packaging.
+    name="BaseAuditTool_Win7",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

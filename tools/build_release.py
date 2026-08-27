@@ -47,13 +47,13 @@ def main() -> None:
             shutil.copy2(template, template_dir / template.name)
     for name in ("启动审核工具.bat", "基础数据审核工具使用说明.docx", "README.md"):
         shutil.copy2(ROOT / name, release_dir / name)
-    config_source = ROOT / "data" / "config.xlsx"
-    if config_source.is_file():
-        shutil.copy2(config_source, data_dir / "config.xlsx")
+    history_source = ROOT / "历史审核说明.xlsx"
+    if history_source.is_file():
+        shutil.copy2(history_source, release_dir / history_source.name)
 
     (data_dir / "目录说明.txt").write_text(
-        "本目录保存 config.xlsx（区域映射、历史审核记录）、常用路径和模板索引。\n"
-        "以后替换或升级 EXE 时，请保留整个 data 目录。\n",
+        "本目录保存程序内部 JSON 设置（流程配置、常用路径和模板索引）。\n"
+        "程序首次启动时会将本目录设为隐藏；升级时请保留整个 data 目录。\n",
         encoding="utf-8-sig",
     )
     (release_dir / "发布说明.txt").write_text(
@@ -62,12 +62,13 @@ def main() -> None:
         "启动方法：双击“基础数据审核工具.exe”或“启动审核工具.bat”。\n"
         "模板位置：默认是 templates 目录（本次从 2026-07-31/模板文件 复制），也可在工作台选择其他模板文件目录。\n"
         "模板匹配：根据源数据，只在当前选择的模板文件目录中自动匹配。\n"
-        "用户数据：data 目录。程序升级时不要覆盖或删除。\n"
+        "历史审核说明：根目录的 历史审核说明.xlsx；程序升级时不要覆盖或删除。\n"
+        "程序设置：data 目录（默认隐藏）；程序升级时不要覆盖或删除。\n"
         "常用路径：选中后点击“使用选中路径”或直接双击即可回填。\n"
         "审核期：用于结果命名和历史问题对比，不参与公式计算。\n"
         "公式拆列：五段公式结果会拆为对比值、参考值、差值和详细说明，并保留公式原文。\n"
         "外部文件：完整审核时将模板公式所需工作表复制到审核副本；源文件和外部文件不修改。\n"
-        "区域映射：data/config.xlsx 默认提供“公式校验功能”和“表结构比对功能”。如误删，可执行 基础数据审核工具.exe --init-config 恢复，历史记录不会删除。\n",
+        "模块、流程和按钮由设置中心维护，保存在 data/流程配置.json；如误删，可执行 基础数据审核工具.exe --init-config 恢复，历史审核说明不会删除。\n",
         encoding="utf-8-sig",
     )
 

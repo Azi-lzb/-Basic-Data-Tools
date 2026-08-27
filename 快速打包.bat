@@ -9,7 +9,7 @@ echo Building executable...
 "%PYTHON_EXE%" "%~dp0tools\build_exe.py"
 if errorlevel 1 (
     echo.
-    echo Build failed. Check that PyInstaller is installed.
+    echo Build failed. Please check the error shown above.
     if "%CI%"=="" pause
     exit /b 1
 )

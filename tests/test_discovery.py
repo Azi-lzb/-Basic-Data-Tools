@@ -174,6 +174,25 @@ class DiscoveryTests(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIn("多种报表", result.details)
 
+    def test_plain_named_template_is_recognized_without_bang_prefix(self) -> None:
+        # “！”前缀只是命名习惯，不应作为模板识别的硬性条件。
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            template_dir = root / "templates"
+            input_dir = root / "input"
+            template_dir.mkdir()
+            input_dir.mkdir()
+            make_xlsx(template_dir / "金融基础数据-单位贷款202606.xlsx", "单位贷款")
+            make_xlsx(template_dir / "~$临时锁文件.xlsx", "单位贷款")
+            make_xlsx(input_dir / "001_甲银行_金融基础数据-单位贷款_2026-06.xlsx", "单位贷款")
+            profiles = TemplateCatalog(template_dir, root / "index.json").profiles()
+            result = recommend_template(template_dir, input_dir, root / "index.json")
+        self.assertEqual(
+            [Path(item.path).name for item in profiles],
+            ["金融基础数据-单位贷款202606.xlsx"],
+        )
+        self.assertTrue(result.matched)
+
 class SettingsTests(unittest.TestCase):
     def test_settings_round_trip_and_recent_limit(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

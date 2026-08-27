@@ -7,6 +7,7 @@ from typing import Any, Iterable
 
 from .history import HISTORY_HEADERS
 from .name_config import (
+    CONDITIONAL_FORMAT_EXTRACT_FUNCTION,
     FORMULA_COPY_FUNCTION,
     FeatureMapping,
     ISSUE_EXTRACT_FUNCTION,
@@ -144,7 +145,7 @@ class ExcelUnavailableError(RuntimeError):
 class ExcelSession:
     """Owns an isolated, hidden Excel process."""
 
-    def __init__(self) -> None:
+    def __init__(self, engine_preference: str = "自动") -> None:
         self.excel = None
         self._pythoncom = None
         self.engine_name = ""
@@ -153,6 +154,7 @@ class ExcelSession:
         self.copy_formula_seconds = 0.0
         self.calculate_seconds = 0.0
         self.external_copy_seconds = 0.0
+        self.engine_preference = engine_preference if engine_preference in {"自动", "Microsoft Excel", "WPS 表格"} else "自动"
 
     def __enter__(self) -> "ExcelSession":
         try:
@@ -166,11 +168,16 @@ class ExcelSession:
         self._pythoncom = pythoncom
         pythoncom.CoInitialize()
         last_error: Exception | None = None
-        for progid, engine_name in (
-            ("Excel.Application", "Microsoft Excel"),
-            ("ket.Application", "WPS 表格"),
-            ("KET.Application", "WPS 表格"),
-        ):
+        candidates = {
+            "自动": (
+                ("Excel.Application", "Microsoft Excel"),
+                ("ket.Application", "WPS 表格"),
+                ("KET.Application", "WPS 表格"),
+            ),
+            "Microsoft Excel": (("Excel.Application", "Microsoft Excel"),),
+            "WPS 表格": (("ket.Application", "WPS 表格"), ("KET.Application", "WPS 表格")),
+        }[self.engine_preference]
+        for progid, engine_name in candidates:
             try:
                 self.excel = win32com.client.DispatchEx(progid)
                 self.engine_name = engine_name
@@ -181,7 +188,7 @@ class ExcelSession:
             pythoncom.CoUninitialize()
             self._pythoncom = None
             raise ExcelUnavailableError(
-                "无法启动 Microsoft Excel 或 WPS 表格，请确认已安装表格软件并能正常打开工作簿"
+                f"无法启动{self.engine_preference if self.engine_preference != '自动' else ' Microsoft Excel 或 WPS 表格'}，请确认已安装表格软件并能正常打开工作簿"
             ) from last_error
 
         self.excel.Visible = False
@@ -1205,6 +1212,193 @@ class ExcelSession:
             )
         return issues
 
+    def extract_conditional_format_issues(
+        self,
+        workbook: Any,
+        *,
+        mapping: FeatureMapping,
+        structure_ranges: Iterable[CopyRange],
+        period: str,
+        batch_id: str,
+        audit_time: str,
+        org_code: str,
+        org_name: str,
+        source_file: Path,
+    ) -> list[Issue]:
+        """Extract cells whose conditional formatting changes the fill colour.
+
+        ``DisplayFormat`` is deliberately used instead of the stored cell fill:
+        the latter describes the base style and cannot tell whether a conditional
+        formatting rule has actually been triggered.  A named ``条件格式区域`` is
+        preferred; without it only the sheets' conditional-format applies-to
+        ranges are scanned.
+        """
+        requested = self._named_ranges_for_features(workbook, [mapping])
+        cells: dict[tuple[str, int, int], Any] = {}
+        if requested:
+            for item in requested:
+                sheet = workbook.Worksheets(item.sheet_name)
+                area = sheet.Range(item.address)
+                for row in range(1, int(area.Rows.Count) + 1):
+                    for col in range(1, int(area.Columns.Count) + 1):
+                        cell = area.Cells(row, col)
+                        cells[(item.sheet_name, int(cell.Row), int(cell.Column))] = cell
+        else:
+            for index in range(1, workbook.Worksheets.Count + 1):
+                sheet = workbook.Worksheets(index)
+                try:
+                    conditions = sheet.UsedRange.FormatConditions
+                    count = int(conditions.Count)
+                except Exception:
+                    count = 0
+                for condition_index in range(1, count + 1):
+                    try:
+                        applies_to = conditions.Item(condition_index).AppliesTo
+                        for area in applies_to.Areas:
+                            for row in range(1, int(area.Rows.Count) + 1):
+                                for col in range(1, int(area.Columns.Count) + 1):
+                                    cell = area.Cells(row, col)
+                                    cells[(str(sheet.Name), int(cell.Row), int(cell.Column))] = cell
+                    except Exception:
+                        continue
+
+        issues: list[Issue] = []
+        for (sheet_name, row, column), cell in cells.items():
+            try:
+                if int(cell.FormatConditions.Count) <= 0:
+                    continue
+            except Exception:
+                # Some WPS versions expose DisplayFormat but not a per-cell
+                # FormatConditions collection; the selected named range then
+                # remains the explicit scope supplied by the template author.
+                pass
+            color = self._active_conditional_fill_color(cell)
+            if color is None:
+                continue
+            target_cell = _column_letters(column) + str(row)
+            check_field = self._conditional_check_field(
+                workbook.Worksheets(sheet_name), row, column, structure_ranges
+            )
+            comment = self._cell_comment_text(cell)
+            detail = comment or "条件格式填充已触发，请核实"
+            rule = AuditRule(
+                rule_id="条件格式填充",
+                enabled=True,
+                report_code="",
+                sheet_name=sheet_name,
+                formula_cell=target_cell,
+                target_cell=target_cell,
+                severity="总行条件格式触发",
+                message=detail,
+            )
+            issues.append(Issue(
+                issue_id=self._issue_id(org_code, source_file, rule, check_field),
+                period=period,
+                batch_id=batch_id,
+                audit_time=audit_time,
+                triggered=True,
+                status="",
+                first_seen_period="",
+                previous_seen_period="",
+                consecutive_count=1,
+                org_code=org_code,
+                org_name=org_name,
+                report_code="",
+                sheet_name=sheet_name,
+                rule_id="条件格式填充",
+                severity="总行条件格式触发",
+                formula_cell=target_cell,
+                target_cell=target_cell,
+                target_value=_plain(cell.Value2),
+                formula_result=_plain(cell.Value2),
+                message=detail,
+                source_file=str(source_file.resolve()),
+                audit_file=str(source_file.resolve()),
+                check_field=check_field,
+                detail=detail,
+                display_fill_color=color,
+            ))
+        return issues
+
+    @staticmethod
+    def _active_conditional_fill_color(cell: Any) -> int | None:
+        try:
+            displayed = int(cell.DisplayFormat.Interior.Color)
+            base = int(cell.Interior.Color)
+        except Exception as exc:
+            raise RuntimeError(
+                "当前表格引擎无法读取条件格式的实际显示颜色；请改用 Microsoft Excel 或 Windows 版 WPS 后重试"
+            ) from exc
+        return displayed if displayed != base else None
+
+    @staticmethod
+    def _cell_comment_text(cell: Any) -> str:
+        try:
+            comment = cell.Comment
+            if comment is not None:
+                return str(comment.Text() or "").strip()
+        except Exception:
+            pass
+        return ""
+
+    @staticmethod
+    def _conditional_check_field(
+        sheet: Any, row: int, column: int, structure_ranges: Iterable[CopyRange],
+    ) -> str:
+        """Build ``left labels｜top labels`` from configured table structure.
+
+        Reading a merged cell through ``MergeArea.Cells(1, 1)`` keeps parent
+        labels available on child rows/columns and supports multi-level headers.
+        """
+        areas = [item for item in structure_ranges if item.sheet_name == str(sheet.Name)]
+        if not areas:
+            return ""
+        bounds: list[tuple[int, int, int, int]] = []
+        for item in areas:
+            try:
+                area = sheet.Range(item.address)
+                bounds.append((int(area.Row), int(area.Column), int(area.Rows.Count), int(area.Columns.Count)))
+            except Exception:
+                continue
+        if not bounds:
+            return ""
+
+        def display_value(r: int, c: int) -> str:
+            try:
+                cell = sheet.Cells(r, c)
+                merged = cell.MergeArea
+                cell = merged.Cells(1, 1)
+                value = cell.Value2
+                if value is None or isinstance(value, (int, float)) and not isinstance(value, bool):
+                    return ""
+                text = str(value).strip()
+                # 表结构区域常覆盖数据列。只把文本型行、列表头拼成校验指标，
+                # 不能把本期/上期金额等数值带入“借款人证件类型_合计”。
+                if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", text.replace(",", "")):
+                    return ""
+                return text
+            except Exception:
+                return ""
+
+        min_row = min(item[0] for item in bounds)
+        min_col = min(item[1] for item in bounds)
+        left: list[str] = []
+        for c in range(min_col, column):
+            value = display_value(row, c)
+            if value and value not in left:
+                left.append(value)
+        top: list[str] = []
+        for r in range(min_row, row):
+            value = display_value(r, column)
+            if value and value not in top:
+                top.append(value)
+        parts = []
+        if left:
+            parts.append("_".join(left))
+        if top:
+            parts.append("_".join(top))
+        return "｜".join(parts)
+
     @staticmethod
     def _read_issue_values(
         workbook: Any, rules: Iterable[AuditRule]
@@ -1690,13 +1884,15 @@ class ExcelSession:
         self,
         path: Path,
         current: list[Issue],
+        *,
+        sheet_name: str = "本期审核结果",
     ) -> None:
         workbook = self.excel.Workbooks.Add()
         try:
             while workbook.Worksheets.Count > 1:
                 workbook.Worksheets(workbook.Worksheets.Count).Delete()
             current_sheet = workbook.Worksheets(1)
-            current_sheet.Name = "本期审核结果"
+            current_sheet.Name = re.sub(r"[\\[\\]:*?/\\\\]", "_", sheet_name or "本期审核结果")[:31] or "本期审核结果"
 
             self._write_table(
                 current_sheet,
@@ -1707,6 +1903,9 @@ class ExcelSession:
             # “定位单元格”直接跳转至对应机构的审核副本。工作表名另列保留，
             # 超链接显示仍只显示单元格地址，方便筛选和复制。
             for row_index, item in enumerate(current, start=2):
+                if item.display_fill_color is not None:
+                    # 仅给“错误类型”列着色，既保留视觉来源，也不影响整行筛选阅读。
+                    current_sheet.Cells(row_index, 4).Interior.Color = item.display_fill_color
                 if not item.audit_file or not item.sheet_name or not item.target_cell:
                     continue
                 audit_path = Path(item.audit_file)

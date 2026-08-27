@@ -2,12 +2,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from openpyxl import Workbook
-
 from src.base_audit.external import make_external_sheet_plan, referenced_external_sheets
 from src.base_audit.name_config import (
     FORMULA_COPY_FUNCTION,
     STRUCTURE_COMPARE_FUNCTION,
+    initialize_config,
     load_feature_mappings,
 )
 
@@ -36,19 +35,16 @@ class ExternalSheetPlanTests(unittest.TestCase):
         self.assertEqual("全部工作表", plan.source)
         self.assertEqual(("集中系统数据", "参照表", "无需复制"), plan.sheet_names)
 
-    def test_region_mapping_uses_named_sheet_and_template_override(self):
+    def test_region_mapping_does_not_depend_on_template_filename(self):
         with TemporaryDirectory() as folder:
             config_path = Path(folder) / "config.xlsx"
-            workbook = Workbook()
-            sheet = workbook.active
-            sheet.title = "模块化功能"
-            sheet.append(["功能名", "功能类型", "命名区域名", "是否限定工作簿", "工作簿关键字", "备注"])
-            sheet.append(["公式复制", FORMULA_COPY_FUNCTION, "校验公式", "否", "", ""])
-            sheet.append(["结构比对", STRUCTURE_COMPARE_FUNCTION, "固定表头", "否", "", ""])
-            sheet.append(["单位公式复制", FORMULA_COPY_FUNCTION, "单位贷款校验", "是", "单位贷款", ""])
-            workbook.create_sheet("历史审核记录")
-            workbook.save(config_path)
+            initialize_config(config_path)
+            workflow = config_path.with_name("流程配置.json")
+            workflow.write_text(
+                '{"version":1,"customModules":[{"功能名":"公式复制","执行模块":"修改_公式校验复制","命名区域名":"校验公式","输出":"审核副本","备注":""},{"功能名":"结构比对","执行模块":"核对_表结构比对","命名区域名":"固定表头","输出":"运行日志","备注":""}],"customFlows":[],"combineSheetsPlans":[{"id":"default","name":"默认","mode":"regex","pattern":"(?P<组合>.+)","groups":[]}],"activeCombineSheetsPlanId":"default"}',
+                encoding="utf-8",
+            )
             mappings = load_feature_mappings(config_path, Path("单位贷款.xlsx"))
         names = {mapping.name: mapping.range_names for mapping in mappings}
-        self.assertEqual(("单位贷款校验",), names["单位公式复制"])
+        self.assertEqual(("校验公式",), names["公式复制"])
         self.assertEqual(("固定表头",), names["结构比对"])

@@ -13,7 +13,10 @@ from .excel_com import ExcelSession
 from .external import ExternalSheetPlan, make_external_sheet_plan
 from .history import merge_history
 from .name_config import (
+    AUDIT_RESULT_OUTPUT_FUNCTION,
+    CONDITIONAL_FORMAT_EXTRACT_FUNCTION,
     EXTERNAL_FILE_FUNCTION,
+    COMBINE_SHEETS_FUNCTION,
     FeatureMapping,
     FORMULA_COPY_FUNCTION,
     ISSUE_EXTRACT_FUNCTION,
@@ -23,8 +26,9 @@ from .name_config import (
     STRUCTURE_COMPARE_FUNCTION,
     USED_RANGE_SUMMARY_FUNCTION,
     WORKBOOK_TABLE_MERGE_FUNCTION,
+    SOURCE_DIRECTORY_INPUT,
     features_of_type,
-    load_feature_mappings,
+    load_combine_sheets_plan, load_feature_mappings,
     load_flow_steps,
 )
 from .models import (
@@ -36,7 +40,7 @@ from .models import (
     TemplateDefinition,
 )
 from .feature_log import FeatureLog
-from .merge_org import MergeOrgResult, TemplateMergeResult, run_merge_org, run_template_merge
+from .merge_org import MergeOrgResult, TemplateMergeResult, run_combine_sheets, run_merge_org, run_template_merge
 from .preflight_xlsx import (
     template_structure_values,
     validate_required_sheets_xlsx,
@@ -80,7 +84,7 @@ def _output_prefix(order: int, feature_name: str, output_name: str = "") -> str:
 
 
 def _resolve_process_source(steps, step, copy_producers):
-    """按兜底语义解析一步的“处理对象”。
+    """按兜底语义解析一步的“输入”。
 
     ``copy_producers`` 是流程中会产副本（阶段副本/审核副本）的功能名集合；
     只有它们能作为数据来源，检查类/核对类等不产副本的功能不能被引用。
@@ -91,7 +95,7 @@ def _resolve_process_source(steps, step, copy_producers):
     - 不匹配或引用了不产副本的功能 → 跳过非副本功能，回退到最近前一个产副本功能；
       本步之前没有产副本功能则回退源数据目录，并返回一条提示由调用方写入运行记录。
     """
-    if not step.process_source:
+    if not step.process_source or step.process_source == SOURCE_DIRECTORY_INPUT:
         return None, None
     prior = [s for s in steps if s.order < step.order]
     if step.process_source in copy_producers and any(s.feature_name == step.process_source for s in prior):
@@ -102,17 +106,17 @@ def _resolve_process_source(steps, step, copy_producers):
     )
     if fallback is not None:
         return fallback, (
-            f"流程“{step.flow_name}”的“{step.feature_name}”处理对象"
+            f"流程“{step.flow_name}”的“{step.feature_name}”输入"
             f"“{step.process_source}”不是本流程中排在其前且会产副本的功能，"
             f"已按最近前一个产副本功能“{fallback}”兜底处理"
         )
     if not prior:
         return None, (
             f"流程“{step.flow_name}”的“{step.feature_name}”是流程第一个功能，"
-            f"处理对象“{step.process_source}”无法匹配前置功能，已按源数据目录兜底处理"
+            f"输入“{step.process_source}”无法匹配前置功能，已按源数据目录兜底处理"
         )
     return None, (
-        f"流程“{step.flow_name}”的“{step.feature_name}”处理对象"
+        f"流程“{step.flow_name}”的“{step.feature_name}”输入"
         f"“{step.process_source}”之前没有会产副本的功能，已按源数据目录兜底处理"
     )
 
@@ -153,8 +157,11 @@ def _source_files(
 
 
 class AuditService:
-    def __init__(self, *, config_path: Path | None = None) -> None:
+    def __init__(
+        self, *, config_path: Path | None = None, engine_preference: str = "自动"
+    ) -> None:
         self.config_path = config_path
+        self.engine_preference = engine_preference
 
     def summarize_regions(
         self,
@@ -174,7 +181,7 @@ class AuditService:
         from .name_config import load_flow_features
         from .region_summary import run_region_summaries
         if self.config_path is None:
-            raise ValueError("汇总功能需要 config.xlsx")
+            raise ValueError("汇总功能需要历史审核说明.xlsx")
         flow_features = load_flow_features(self.config_path, flow_name) if flow_name else None
         if flow_name and not flow_features:
             raise ValueError(f"执行流程“{flow_name}”没有启用的功能")
@@ -192,6 +199,7 @@ class AuditService:
             output_name=output_name,
             feature_log=feature_log,
             copies_dir=copies_dir,
+            engine_preference=self.engine_preference,
         )
 
     def merge_org_files(
@@ -218,7 +226,57 @@ class AuditService:
             on_step=on_step,
             feature_log=feature_log,
             output_name=output_name,
+            engine_preference=self.engine_preference,
         )
+
+    def combine_sheets(
+        self,
+        *,
+        input_dir: Path,
+        output_dir: Path,
+        period: str = "",
+        selected_files: list[Path] | None = None,
+        flow_name: str | None = None,
+        recursive: bool = True,
+        on_step: Optional[Callable[[str], None]] = None,
+        feature_log: Optional[FeatureLog] = None,
+        output_name: str | None = None,
+    ) -> MergeOrgResult:
+        if self.config_path is None:
+            raise ValueError("组合工作表需要流程配置")
+        plan = load_combine_sheets_plan(self.config_path)
+        if on_step is not None:
+            on_step(f"组合分组方案：{plan['name']}（{plan['mode']}）")
+        return run_combine_sheets(
+            input_dir=input_dir, output_dir=output_dir, period=period,
+            selected_files=selected_files, flow_name=flow_name, recursive=recursive,
+            on_step=on_step, feature_log=feature_log, output_name=output_name,
+            engine_preference=self.engine_preference, grouping_plan=plan,
+        )
+
+    def is_standalone_combine_flow(self, flow_name: str) -> bool:
+        """Whether a flow needs only source files, not a template or external file.
+
+        The workbench must inspect configured steps rather than compare the
+        displayed flow name: users can create a custom button or copy a flow
+        that contains the built-in combine module.
+        """
+        if self.config_path is None:
+            return False
+        steps = load_flow_steps(self.config_path, flow_name)
+        if not steps:
+            return False
+        mappings = {
+            item.name: item
+            for item in load_feature_mappings(self.config_path, Path("__无需模板__.xlsx"))
+        }
+        types = {
+            mappings[step.feature_name].feature_type
+            for step in steps
+            if step.feature_name in mappings
+        }
+        executable = types - {NAMED_RANGE_CHECK_FUNCTION}
+        return executable in ({MERGE_ORG_FILES_FUNCTION}, {COMBINE_SHEETS_FUNCTION})
 
     def merge_template_files(
         self,
@@ -237,6 +295,7 @@ class AuditService:
             base_template=base_template,
             source_templates=source_templates,
             on_step=on_step,
+            engine_preference=self.engine_preference,
         )
 
     def run_flow(
@@ -260,7 +319,7 @@ class AuditService:
         ``strict`` 控制组合前置缺失时的处理：主流程(True)报错，自定义流程(False)只警告。
         """
         if self.config_path is None:
-            raise ValueError("按流程执行需要 data/config.xlsx")
+            raise ValueError("按流程执行需要 data/历史审核说明.xlsx")
         steps = load_flow_steps(self.config_path, flow_name)
         if not steps:
             raise ValueError(f"执行流程“{flow_name}”不存在，或没有启用的功能")
@@ -281,7 +340,12 @@ class AuditService:
         }
         effective_sources: dict[int, str | None] = {}
         for step in steps:
-            effective, message = _resolve_process_source(steps, step, copy_producers)
+            if mappings[step.feature_name].feature_type == AUDIT_RESULT_OUTPUT_FUNCTION:
+                # 最终输出读取“输出”同名的结果集，不是工作簿副本；“输入”
+                # 仅在界面中显示该结果集名称，不参与副本来源解析。
+                effective, message = None, None
+            else:
+                effective, message = _resolve_process_source(steps, step, copy_producers)
             effective_sources[step.order] = effective
             if message is not None and on_step is not None:
                 on_step(f"提示：{message}")
@@ -294,9 +358,10 @@ class AuditService:
         named_range_checks = named_range_steps
         named_range_mappings = tuple(mapping for _, mapping in named_range_steps)
         executable_types = feature_types - {NAMED_RANGE_CHECK_FUNCTION}
-        if MERGE_ORG_FILES_FUNCTION in executable_types and executable_types != {MERGE_ORG_FILES_FUNCTION}:
-            raise ValueError("“组合联合核查表”必须单独成一个流程，不能与其他功能混用")
-        if executable_types != {MERGE_ORG_FILES_FUNCTION} and (
+        standalone_combine_types = {MERGE_ORG_FILES_FUNCTION, COMBINE_SHEETS_FUNCTION}
+        if executable_types.intersection(standalone_combine_types) and executable_types not in ({MERGE_ORG_FILES_FUNCTION}, {COMBINE_SHEETS_FUNCTION}):
+            raise ValueError("“组合联合核查表”或“组合工作表”必须单独成一个流程，不能与其他功能混用")
+        if executable_types not in ({MERGE_ORG_FILES_FUNCTION}, {COMBINE_SHEETS_FUNCTION}) and (
             template_path is None or not template_path.is_file()
         ):
             raise FileNotFoundError("该执行流程需要选择有效的模板文件")
@@ -315,21 +380,22 @@ class AuditService:
             summary_output_name = _output_prefix(
                 output_step.order, output_mapping.name, output_step.output_name
             )
-        # 一个流程生成一份运行日志 xlsx，每个功能一个 sheet；“是否输出结果”
-        # 只决定外部文件添加/公式校验/校验结果提取的实际文件是否保留。
+        # 一个流程生成一份运行日志 xlsx，每个功能一个 sheet；检查/核对类步骤
+        # 填“是否输出结果=是”时，运行日志即为其可保留输出，用于单独的检查流程。
         feature_log = FeatureLog(flow_name, output_dir) if write_flow_logs else None
         try:
-            if executable_types == {MERGE_ORG_FILES_FUNCTION}:
+            if executable_types in ({MERGE_ORG_FILES_FUNCTION}, {COMBINE_SHEETS_FUNCTION}):
                 merge_steps = [
                     (step, mappings[step.feature_name]) for step in steps
-                    if mappings[step.feature_name].feature_type == MERGE_ORG_FILES_FUNCTION
+                    if mappings[step.feature_name].feature_type in standalone_combine_types
                 ]
                 if len(merge_steps) != 1:
-                    raise ValueError("“组合联合核查表”流程必须且只能启用一个合并模块")
+                    raise ValueError("组合流程必须且只能启用一个合并模块")
                 merge_step, merge_mapping = merge_steps[0]
                 if not merge_step.output_result:
-                    raise ValueError("“组合联合核查表”必须填写“是否输出结果=是”")
-                result = self.merge_org_files(
+                    raise ValueError("组合流程必须填写“是否输出结果=是”")
+                merger = self.merge_org_files if merge_mapping.feature_type == MERGE_ORG_FILES_FUNCTION else self.combine_sheets
+                result = merger(
                     input_dir=input_dir,
                     output_dir=output_dir,
                     period=period,
@@ -470,7 +536,7 @@ class AuditService:
             raise
 
     def _history_storage(self, legacy_path: Path) -> tuple[Path, str, Path | None]:
-        """Keep operational history beside mappings in config.xlsx.
+        """Keep operational history in the configured history workbook.
 
         The supplied path is retained only as a one-time migration source, so
         existing users do not lose their old independent history workbook.
@@ -512,7 +578,7 @@ class AuditService:
         batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
         report_path = output_dir / f"审核前检查_{batch_id}.xlsx"
 
-        with ExcelSession() as excel:
+        with ExcelSession(self.engine_preference) as excel:
             template_workbook = excel.open_workbook(template_path, read_only=True)
             external_workbook = None
             external_plan = None
@@ -719,6 +785,7 @@ class AuditService:
         output_dir.mkdir(parents=True, exist_ok=True)
         file_results: list[FileAuditResult] = []
         raw_issues = []
+        result_sets: dict[str, list] = {}
         preflight_path = output_dir / f"审核前检查_{batch_id}.xlsx"
         service_started = time.monotonic()
         source_copy_seconds = 0.0
@@ -734,7 +801,7 @@ class AuditService:
         # “外部文件添加”的阶段副本目录，供后续“处理对象”指向它的功能使用。
         external_copies_dir: Path | None = None
 
-        with ExcelSession() as excel:
+        with ExcelSession(self.engine_preference) as excel:
             if on_step is not None:
                 on_step(f"已连接表格引擎：{excel.engine_name}")
             history = excel.read_history(history_path, sheet_name=history_sheet)
@@ -793,7 +860,7 @@ class AuditService:
                             on_step(f"完成：{step.feature_name}")
                     issue_result_steps = [
                         (step, mapping) for step, mapping in step_mappings
-                        if step.output_result and mapping.feature_type == ISSUE_EXTRACT_FUNCTION
+                        if step.output_result and mapping.feature_type == AUDIT_RESULT_OUTPUT_FUNCTION
                     ]
                     keep_issue_result = not flow_steps or bool(issue_result_steps)
                     # 阶段快照只保留“外部文件添加”；“公式校验”的工作副本即最终审核副本。
@@ -801,9 +868,9 @@ class AuditService:
                         (step, mapping) for step, mapping in step_mappings
                         if step.output_result and mapping.feature_type == EXTERNAL_FILE_FUNCTION
                     ]
-                    # 检查类与核对类的记录都并入运行日志；“是否输出结果”只控制外部
-                    # 文件添加、公式校验、校验结果提取的实际文件，不再单独写
-                    # “审核前检查”报告（模板体检也进入运行日志）。
+                    # 检查类与核对类的记录都并入运行日志；若检查步骤填写“输出结果=是”，
+                    # 运行日志就是该流程可保留的输出。仍不再单独写“审核前检查”报告，
+                    # 模板体检也进入运行日志。
                     check_report_keep = not flow_steps or any(
                         step.output_result and mapping.feature_type == NAMED_RANGE_CHECK_FUNCTION
                         for step, mapping in step_mappings
@@ -1107,13 +1174,57 @@ class AuditService:
 
                 # —— 阶段：校验结果提取 + 收尾（写审核导航、保存、记录结果）——
                 extract_active = ISSUE_EXTRACT_FUNCTION in active_types
+                conditional_steps = [
+                    (step, mapping) for step, mapping in step_mappings
+                    if mapping.feature_type == CONDITIONAL_FORMAT_EXTRACT_FUNCTION
+                ]
                 if extract_active:
                     emit_feature_steps(ISSUE_EXTRACT_FUNCTION, "正在执行")
+                for step, _mapping in conditional_steps:
+                    if on_step is not None:
+                        on_step(f"正在执行：{step.feature_name}")
                 for record in records:
                     workbook = None
                     issues = []
+                    conditional_issues = []
+                    conditional_by_set: dict[str, list] = {}
                     extract_ok = True
                     try:
+                        if conditional_steps:
+                            source_workbook = None
+                            try:
+                                # 条件格式默认直接读取原始报送文件；若用户明确把“输入”
+                                # 设为前序副本模块，则读取该审核副本。
+                                conditional_input = next(
+                                    (effective_sources.get(step.order) for step, _mapping in conditional_steps
+                                     if effective_sources is not None and effective_sources.get(step.order)),
+                                    None,
+                                )
+                                conditional_path = record["audit"] if conditional_input else record["source"]
+                                started = time.monotonic()
+                                source_workbook = excel.open_workbook(conditional_path, read_only=True)
+                                open_seconds += time.monotonic() - started
+                                for step, mapping in conditional_steps:
+                                    try:
+                                        started = time.monotonic()
+                                        extracted = excel.extract_conditional_format_issues(
+                                            source_workbook,
+                                            mapping=mapping,
+                                            structure_ranges=definition.structure_ranges,
+                                            period=period.strip(), batch_id=batch_id,
+                                            audit_time=audit_time, org_code=record["org_code"],
+                                            org_name=record["org_name"], source_file=record["source"],
+                                        )
+                                        conditional_issues.extend(extracted)
+                                        conditional_by_set.setdefault(step.result_set or "本期审核结果", []).extend(extracted)
+                                        extract_seconds += time.monotonic() - started
+                                    except Exception as exc:
+                                        if step.on_failure != "跳过":
+                                            raise
+                                        stage_log_failure(record, step.feature_name, exc)
+                            finally:
+                                if source_workbook is not None:
+                                    excel.close_workbook(source_workbook)
                         started = time.monotonic()
                         workbook = excel.open_workbook(record["audit"], read_only=False)
                         open_seconds += time.monotonic() - started
@@ -1139,6 +1250,15 @@ class AuditService:
                                     raise
                                 extract_ok = False
                                 stage_log_failure(record, ISSUE_EXTRACT_FUNCTION, exc)
+                        formula_set = next(
+                            (step.result_set or "本期审核结果" for step, mapping in step_mappings
+                             if mapping.feature_type == ISSUE_EXTRACT_FUNCTION),
+                            "本期审核结果",
+                        )
+                        result_sets.setdefault(formula_set, []).extend(issues)
+                        for name, extracted in conditional_by_set.items():
+                            result_sets.setdefault(name, []).extend(extracted)
+                        issues.extend(conditional_issues)
                         record["issues"] = issues
                         # 历史说明只读带入后，在本次打开期间直接写审核导航，
                         # 避免每家审核副本保存后又重新打开一次。
@@ -1167,6 +1287,9 @@ class AuditService:
                     )
                 if extract_active:
                     emit_feature_steps(ISSUE_EXTRACT_FUNCTION, "完成")
+                for step, _mapping in conditional_steps:
+                    if on_step is not None:
+                        on_step(f"完成：{step.feature_name}")
                 if feature_log is not None and external_log_rows:
                     external_feature_name = next(
                         (mapping.name for step, mapping in step_mappings
@@ -1225,14 +1348,31 @@ class AuditService:
                         for item in current
                     ],
                 )
+                for _step, mapping in conditional_steps:
+                    feature_log.add_sheet(
+                        mapping.name,
+                        ("报送文件", "工作表", "定位单元格", "错误类型", "校验指标", "描述", "当前值"),
+                        [
+                            (
+                                Path(item.source_file).name if item.source_file else "",
+                                item.sheet_name, item.target_cell, item.severity,
+                                item.check_field, item.detail or item.message, item.target_value,
+                            )
+                            for item in current if item.rule_id == "条件格式填充"
+                        ],
+                    )
             summary_path = None
             if keep_issue_result:
-                if issue_result_steps:
-                    step, mapping = issue_result_steps[-1]
-                    summary_path = output_dir / f"{_output_prefix(step.order, mapping.name, step.output_name)}_{batch_id}.xlsx"
-                else:
-                    summary_path = output_dir / f"基础数据审核结果_{period}_{batch_id}.xlsx"
-                excel.write_summary(summary_path, current)
+                outputs = issue_result_steps or [(None, None)]
+                for step, mapping in outputs:
+                    if step is not None and mapping is not None:
+                        result_set = step.result_set or "本期审核结果"
+                        path = output_dir / f"{_output_prefix(step.order, mapping.name, step.output_name)}_{batch_id}.xlsx"
+                    else:
+                        result_set = "本期审核结果"
+                        path = output_dir / f"基础数据审核结果_{period}_{batch_id}.xlsx"
+                    excel.write_summary(path, result_sets.get(result_set, []), sheet_name=result_set)
+                    summary_path = path
 
         total_seconds = time.monotonic() - service_started
         performance_lines = (

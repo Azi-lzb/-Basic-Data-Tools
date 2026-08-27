@@ -13,15 +13,24 @@ from .discovery import (
     explanation_files,
     recommend_template,
 )
-from .history import organize_history_rule_numbers
-from .name_config import MERGE_ORG_FLOW, initialize_config, reset_default_configuration
+from .history import HISTORY_HEADERS
+from .name_config import (
+    HISTORY_WORKBOOK_NAME,
+    initialize_config,
+    load_config_editor_data,
+    reset_default_configuration,
+    save_config_editor_draft,
+    validate_config_editor_draft,
+)
 from .service import AuditService
-from .settings import SettingsStore
+from .settings import SettingsStore, hide_application_data_directory
 
 
 class WebApi:
     def __init__(self, project_root: Path) -> None:
         self.project_root = project_root
+        self.history_path = project_root / HISTORY_WORKBOOK_NAME
+        hide_application_data_directory(project_root / "data")
         self.settings_store = SettingsStore(project_root / "data" / "用户设置.json")
         self.settings = self.settings_store.load()
         bundled_templates = project_root / "templates"
@@ -44,54 +53,154 @@ class WebApi:
             "outputPinned": self.settings.output_pinned,
             "recursive": self.settings.recursive_folders,
             "writeFlowLogs": self.settings.write_flow_logs,
+            "calculationEngine": self.settings.calculation_engine,
+            "showCustomFeatures": self.settings.show_custom_features,
             "sourceFiles": [],
             "selectedFiles": [],
             "mixedTemplates": [],
             "explanationFiles": [],
         }
+        # This also performs the one-time non-destructive filename migration.
+        initialize_config(self.history_path)
 
     def get_state(self) -> dict[str, Any]:
         return self.state
 
     def initialize_config(self) -> dict[str, Any]:
-        """Restore default mappings and migrate the history sheet name if needed."""
-        path = initialize_config(self.project_root / "data" / "config.xlsx")
-        self._log(f"已初始化配置：{path}（历史审核结果内容未改动）")
+        """Migrate workflow settings to JSON and retain Excel history only."""
+        path = initialize_config(self.history_path)
+        self._log(f"已初始化流程配置：{path}（仅保留历史审核结果）")
         self.state["status"] = "配置已初始化"
         return self.state
 
     def reset_config(self) -> dict[str, Any]:
-        """Reset executable defaults without touching history or custom buttons."""
-        path = reset_default_configuration(self.project_root / "data" / "config.xlsx")
-        self._log(f"已重置模块化功能和执行流程：{path}（历史审核结果、自定义按钮未改动）")
+        """Reset workflow display settings without touching Excel history."""
+        path = reset_default_configuration(self.history_path)
+        self._log(f"已重置自定义流程和主界面显示设置：{path}（历史审核结果未改动）")
         self.state["status"] = "配置已重置"
         return self.state
 
-    def organize_history_rule_numbers(self) -> dict[str, Any]:
-        """Reassign colliding history-rule serials without running an audit."""
-        result = organize_history_rule_numbers(
-            self.project_root / "data" / "config.xlsx"
+    def get_config_editor_data(self) -> dict[str, object]:
+        """Configuration-centre payload; deliberately excludes history records."""
+        return load_config_editor_data(self.history_path)
+
+    def validate_config_editor_draft(self, draft: dict[str, Any]) -> dict[str, object]:
+        """Validate a pending visual-editor change without writing history."""
+        errors = validate_config_editor_draft(
+            self.history_path, draft
         )
-        self.state["status"] = "历史规则编号已整理"
-        self._log(result.summary_text())
-        return self.state
+        return {"valid": not errors, "errors": errors}
+
+    def save_config_editor_draft(self, draft: dict[str, Any]) -> dict[str, object]:
+        """Persist functions, workflows and display settings; Excel history stays intact."""
+        if self.state["busy"]:
+            return {"ok": False, "errors": ["任务正在运行，暂不能修改配置"]}
+        try:
+            path = save_config_editor_draft(
+                self.history_path, draft
+            )
+        except Exception as exc:
+            self._log(f"保存设置中心配置失败：{exc}")
+            return {"ok": False, "errors": [str(exc)]}
+        self._log(f"已保存功能、流程和主界面显示设置：{path}")
+        return {"ok": True, "errors": [], "data": load_config_editor_data(path)}
 
     def open_config(self) -> dict[str, Any]:
-        """Open data/config.xlsx with the default app for quick review."""
+        """Backward-compatible alias for :meth:`open_history_explanation`."""
+        return self.open_history_explanation()
+
+    def open_history_explanation(self) -> dict[str, Any]:
+        """Open the Excel workbook that stores historical audit explanations."""
         import os
-        path = self.project_root / "data" / "config.xlsx"
+        path = self.history_path
         if not path.is_file():
-            self.state["status"] = "配置文件不存在"
-            self._log(f"未找到配置文件：{path}")
+            self.state["status"] = "历史审核说明不存在"
+            self._log(f"未找到历史审核说明：{path}")
             return self.state
         try:
             os.startfile(path)
         except Exception as exc:
-            self.state["status"] = "无法打开配置文件"
-            self._log(f"打开配置文件失败：{exc}")
+            self.state["status"] = "无法打开历史审核说明"
+            self._log(f"打开历史审核说明失败：{exc}")
             return self.state
-        self._log(f"已打开配置文件：{path}")
+        self._log(f"已打开历史审核说明：{path}")
         return self.state
+
+    def get_history_page(self, query: dict[str, Any] | None = None) -> dict[str, object]:
+        """Return one read-only, filtered page of historical audit explanations.
+
+        The worksheet is streamed with openpyxl: large history files never
+        become a giant WebView payload.  This endpoint deliberately provides
+        no editing operation; formal maintenance remains in Excel.
+        """
+        from openpyxl import load_workbook
+
+        query = query if isinstance(query, dict) else {}
+
+        def number(name: str, default: int, minimum: int, maximum: int) -> int:
+            try:
+                value = int(query.get(name, default))
+            except (TypeError, ValueError):
+                value = default
+            return max(minimum, min(maximum, value))
+
+        page = number("page", 1, 1, 1000000)
+        page_size = number("pageSize", 50, 10, 100)
+        keyword = str(query.get("keyword") or "").strip().casefold()
+        error_type = str(query.get("errorType") or "").strip()
+        opinion = str(query.get("opinion") or "").strip()
+        path = self.history_path
+        if not path.is_file():
+            return {
+                "columns": list(HISTORY_HEADERS), "items": [], "total": 0,
+                "page": page, "pageSize": page_size, "totalPages": 0,
+                "errorTypes": [], "opinions": [], "error": "历史审核说明不存在",
+            }
+        workbook = load_workbook(path, read_only=True, data_only=True)
+        try:
+            if "历史审核结果" not in workbook.sheetnames:
+                raise ValueError("历史审核说明中缺少“历史审核结果”工作表")
+            rows = workbook["历史审核结果"].iter_rows(values_only=True)
+            headers = [str(value or "").strip() for value in next(rows, ())]
+            missing = [name for name in HISTORY_HEADERS if name not in headers]
+            if missing:
+                raise ValueError("历史审核说明缺少列：" + "、".join(missing))
+            positions = {name: headers.index(name) for name in HISTORY_HEADERS}
+            total = 0
+            error_types: set[str] = set()
+            opinions: set[str] = set()
+            items: list[dict[str, str]] = []
+            start = (page - 1) * page_size
+            end = start + page_size
+            for raw in rows:
+                item = {
+                    name: str(raw[index] if index < len(raw) and raw[index] is not None else "").strip()
+                    for name, index in positions.items()
+                }
+                if item["错误类型"]:
+                    error_types.add(item["错误类型"])
+                if item["审核意见"]:
+                    opinions.add(item["审核意见"])
+                haystack = " ".join(item.values()).casefold()
+                if keyword and keyword not in haystack:
+                    continue
+                if error_type and item["错误类型"] != error_type:
+                    continue
+                if opinion and item["审核意见"] != opinion:
+                    continue
+                if start <= total < end:
+                    items.append(item)
+                total += 1
+            total_pages = (total + page_size - 1) // page_size
+            # A filter can make the requested page out of range.  Reply with
+            # the real last page marker; the front end can request it once.
+            return {
+                "columns": list(HISTORY_HEADERS), "items": items, "total": total,
+                "page": page, "pageSize": page_size, "totalPages": total_pages,
+                "errorTypes": sorted(error_types), "opinions": sorted(opinions),
+            }
+        finally:
+            workbook.close()
 
     def open_user_guide(self) -> dict[str, Any]:
         """Open the adjacent Word user guide with the default application."""
@@ -128,52 +237,36 @@ class WebApi:
         return self.state
 
     def _load_custom_features(self) -> list[dict[str, Any]]:
-        """Read flat custom entries from config.xlsx's "自定义功能" sheet."""
-        from openpyxl import load_workbook
-        path = self.project_root / "data" / "config.xlsx"
-        if not path.is_file():
-            return []
+        """Read custom flows configured to appear as main-workbench entries."""
         try:
-            workbook = load_workbook(path, read_only=True, data_only=True)
+            editor = load_config_editor_data(self.history_path)
         except Exception as exc:
-            self._log(f"读取自定义功能配置失败：{exc}")
+            self._log(f"读取流程显示配置失败：{exc}")
             return []
-        try:
-            if "自定义按钮" not in workbook.sheetnames:
-                return []
-            rows = workbook["自定义按钮"].iter_rows(values_only=True)
-            header = [str(value).strip() if value is not None else "" for value in next(rows, ())]
-            try:
-                name_index = header.index("按钮名称")
-                flow_index = header.index("流程名称")
-                show_index = header.index("是否显示")
-                remark_index = header.index("备注")
-            except ValueError:
-                self._log("config.xlsx 的“自定义按钮”缺少必要列：按钮名称、流程名称、是否显示、备注")
-                return []
-
-            def cell(row: tuple[object, ...], index: int) -> str:
-                return str(row[index]).strip() if index < len(row) and row[index] is not None else ""
-
-            features: list[dict[str, Any]] = []
-            for row in rows:
-                feature_name = cell(row, name_index)
-                flow_name = cell(row, flow_index)
-                if not feature_name:
-                    continue
-                features.append({
-                    "id": feature_name,
-                    "name": feature_name,
-                    "flow": flow_name,
-                    "shown": cell(row, show_index).casefold() in {"是", "y", "yes", "true", "1"},
-                    "remark": cell(row, remark_index),
-                })
-            return features
-        finally:
-            workbook.close()
+        display = editor.get("flowDisplay", {})
+        if not isinstance(display, dict):
+            return []
+        features: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        # 常用流程已有固定主按钮；这里只显示用户在流程编排中新建并勾选的流程。
+        for row in editor.get("customFlows", []):
+            feature_name = str(row.get("流程名") or "").strip()
+            if not feature_name or feature_name in seen:
+                continue
+            seen.add(feature_name)
+            features.append({
+                "id": feature_name,
+                "name": feature_name,
+                "flow": feature_name,
+                "shown": bool(display.get(feature_name)),
+                "remark": "",
+            })
+        return features
 
     def get_custom_features(self) -> list[dict[str, Any]]:
         """Visible flat custom features for the workbench."""
+        if not self.state["showCustomFeatures"]:
+            return []
         return [
             {"id": item["id"], "name": item["name"], "flow": item["flow"], "remark": item["remark"]}
             for item in self._load_custom_features()
@@ -181,7 +274,7 @@ class WebApi:
         ]
 
     def run_custom(self, feature_name: str) -> dict[str, Any]:
-        """Resolve a flat custom entry. Flow dispatch is implemented separately."""
+        """Run one user-defined flow displayed on the workbench."""
         if self.state["busy"]:
             return self.state
         feature = next(
@@ -189,18 +282,18 @@ class WebApi:
             None,
         )
         if feature is None:
-            self._log(f"未找到自定义功能：{feature_name}")
+            self._log(f"未找到显示流程：{feature_name}")
             return self.state
         if not feature["flow"]:
-            self._log(f"自定义功能“{feature['name']}”未填写流程名称。")
+            self._log(f"显示流程“{feature['name']}”缺少流程名称。")
             self.state["status"] = "缺少流程名称"
             return self.state
-        # 自定义按钮触发的流程走宽松校验（strict=False）：组合前置缺失时只警告不报错。
+        # 主界面自定义流程走宽松校验（strict=False）：组合前置缺失时只警告不报错。
         self.start_flow(feature["flow"], strict=False)
         return self.state
 
     def start_flow(self, flow_name: str, strict: bool = True) -> bool:
-        """Start one config.xlsx execution flow by its displayed name."""
+        """Start one configured execution flow by its displayed name."""
         name = str(flow_name).strip()
         if not name:
             self._log("执行流程名称不能为空")
@@ -358,7 +451,10 @@ class WebApi:
     ) -> None:
         started = time.monotonic()
         try:
-            service = AuditService(config_path=self.project_root / "data" / "config.xlsx")
+            service = AuditService(
+                config_path=self.history_path,
+                engine_preference=str(self.state["calculationEngine"]),
+            )
             result = service.merge_template_files(
                 base_template=base_template,
                 source_templates=source_templates,
@@ -411,6 +507,20 @@ class WebApi:
         if "writeFlowLogs" in values:
             value = values["writeFlowLogs"]
             self.state["writeFlowLogs"] = (
+                value if isinstance(value, bool)
+                else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
+            )
+            self._save_settings()
+        if "calculationEngine" in values:
+            candidate = str(values["calculationEngine"]).strip()
+            if candidate not in {"自动", "Microsoft Excel", "WPS 表格"}:
+                self._log("计算引擎只能选择：自动、Microsoft Excel 或 WPS 表格")
+            else:
+                self.state["calculationEngine"] = candidate
+                self._save_settings()
+        if "showCustomFeatures" in values:
+            value = values["showCustomFeatures"]
+            self.state["showCustomFeatures"] = (
                 value if isinstance(value, bool)
                 else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
             )
@@ -503,7 +613,10 @@ class WebApi:
                 "正在读取执行流程……"
             )
             self._save_settings()
-            service = AuditService(config_path=self.project_root / "data" / "config.xlsx")
+            service = AuditService(
+                config_path=self.history_path,
+                engine_preference=str(self.state["calculationEngine"]),
+            )
             output = Path(self.state["output"])
             selected = [Path(path) for path in self.state.get("selectedFiles", [])]
             if action in {"check", "audit"} and not selected:
@@ -517,19 +630,19 @@ class WebApi:
                     flow_name = action[len("flow:"):]
                 else:
                     flow_name = "汇总校验结果说明"
-                merge_org_flow = flow_name == MERGE_ORG_FLOW
-                if merge_org_flow:
+                standalone_combine_flow = service.is_standalone_combine_flow(flow_name)
+                if standalone_combine_flow:
                     self._log(f"当前流程：{flow_name}；仅使用源数据目录")
                 else:
                     self._log(f"当前流程：{flow_name}；模板：{Path(self.state['template']).name}")
                 self._log("正在启动流程处理引擎……", detail=True)
                 result = service.run_flow(
                     flow_name=flow_name,
-                    template_path=None if merge_org_flow else Path(self.state["template"]),
+                    template_path=None if standalone_combine_flow else Path(self.state["template"]),
                     input_dir=Path(self.state["input"]), output_dir=output,
-                    period="" if merge_org_flow else (self.state.get("detectedPeriod") or Path(self.state["input"]).name),
-                    history_path=self.project_root / "data" / "config.xlsx", selected_files=selected,
-                    external_path=None if merge_org_flow else (Path(self.state["external"]) if self.state["external"] else None),
+                    period="" if standalone_combine_flow else (self.state.get("detectedPeriod") or Path(self.state["input"]).name),
+                    history_path=self.history_path, selected_files=selected,
+                    external_path=None if standalone_combine_flow else (Path(self.state["external"]) if self.state["external"] else None),
                     recursive=bool(self.state["recursive"]), on_step=self._log_detail, strict=strict,
                     write_flow_logs=bool(self.state["writeFlowLogs"]),
                 )
@@ -584,11 +697,15 @@ class WebApi:
         self.settings.output_pinned = bool(self.state["outputPinned"])
         self.settings.recursive_folders = bool(self.state["recursive"])
         self.settings.write_flow_logs = bool(self.state["writeFlowLogs"])
+        self.settings.calculation_engine = str(self.state["calculationEngine"])
+        self.settings.show_custom_features = bool(self.state["showCustomFeatures"])
         self.settings_store.save(self.settings)
 
 
 def launch_web(project_root: Path) -> None:
     import webview
+    initialize_config(project_root / HISTORY_WORKBOOK_NAME)
+    hide_application_data_directory(project_root / "data")
     bundle_root = Path(getattr(sys, "_MEIPASS", project_root))
     html = bundle_root / "web" / "index.html" if getattr(sys, "frozen", False) else project_root / "src" / "base_audit" / "web" / "index.html"
     if not html.is_file():
