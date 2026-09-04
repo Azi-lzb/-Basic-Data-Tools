@@ -62,6 +62,7 @@ class WebApi:
             "outputPinned": self.settings.output_pinned,
             "recursive": self.settings.recursive_folders,
             "writeFlowLogs": self.settings.write_flow_logs,
+            "confirmBeforeRun": self.settings.confirm_before_run,
             "calculationEngine": (
                 self.settings.calculation_engine
                 if self.settings.calculation_engine in valid_engine_values()
@@ -552,6 +553,13 @@ class WebApi:
                 else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
             )
             self._save_settings()
+        if "confirmBeforeRun" in values:
+            value = values["confirmBeforeRun"]
+            self.state["confirmBeforeRun"] = (
+                value if isinstance(value, bool)
+                else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
+            )
+            self._save_settings()
         if "calculationEngine" in values:
             candidate = str(values["calculationEngine"]).strip()
             if candidate not in valid_engine_values():
@@ -738,6 +746,7 @@ class WebApi:
         self.settings.output_pinned = bool(self.state["outputPinned"])
         self.settings.recursive_folders = bool(self.state["recursive"])
         self.settings.write_flow_logs = bool(self.state["writeFlowLogs"])
+        self.settings.confirm_before_run = bool(self.state["confirmBeforeRun"])
         self.settings.calculation_engine = str(self.state["calculationEngine"])
         self.settings.show_custom_features = bool(self.state["showCustomFeatures"])
         self.settings_store.save(self.settings)
@@ -788,5 +797,32 @@ def launch_web(project_root: Path) -> None:
     html = bundle_root / "web" / "index.html" if getattr(sys, "frozen", False) else project_root / "frontend" / "web" / "index.html"
     if not html.is_file():
         raise RuntimeError("本地界面文件缺失")
-    webview.create_window("基础数据审核工具", html.as_uri(), js_api=WebApi(project_root), width=1180, height=820, min_size=(900, 650), frameless=True)
+    page = _bridge_alias_page(html)
+    webview.create_window("基础数据审核工具", page.as_uri(), js_api=WebApi(project_root), width=1180, height=820, min_size=(900, 650), frameless=True)
     webview.start(gui="edgechromium")
+
+
+def _bridge_alias_page(html: Path) -> Path:
+    """为真 pywebview 窗口生成带别名垫片的临时页面。
+
+    前端统一调用 ``bridge.api.方法名(...)`` 并等待 ``bridgeready``；pywebview
+    原生只提供 ``window.pywebview`` 和 ``pywebviewready``。这里在 <head> 注入
+    别名脚本把两者桥接起来，共用页面文件本身保持与 shell-flask 完全一致。
+    """
+    import tempfile
+
+    source = html.read_text(encoding="utf-8")
+    if "</head>" not in source:
+        raise RuntimeError("本地界面文件缺失 <head>，无法注入桥接别名")
+    alias = (
+        "<script>window.addEventListener('pywebviewready',function(){"
+        "window.bridge=window.pywebview;"
+        "window.dispatchEvent(new Event('bridgeready'));"
+        "});</script>"
+    )
+    handle, name = tempfile.mkstemp(prefix="audit_bridge_", suffix=".html")
+    import os as _os
+
+    with _os.fdopen(handle, "w", encoding="utf-8") as stream:
+        stream.write(source.replace("</head>", alias + "</head>", 1))
+    return Path(name)

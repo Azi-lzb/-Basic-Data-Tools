@@ -88,6 +88,17 @@ class WebAppCompatibilityTests(unittest.TestCase):
             api.update({"calculationEngine": "不存在的引擎"})
             self.assertEqual("WPS 表格", api.state["calculationEngine"])
 
+    def test_confirm_before_run_defaults_on_and_toggles(self) -> None:
+        with TemporaryDirectory() as folder:
+            api = WebApi(Path(folder))
+            # 默认开启：误点主按钮先看到文件清单。
+            self.assertTrue(api.state["confirmBeforeRun"])
+            api.update({"confirmBeforeRun": False})
+            self.assertFalse(api.state["confirmBeforeRun"])
+            # 重启后保持关闭（写入用户设置）。
+            reloaded = WebApi(Path(folder))
+            self.assertFalse(reloaded.state["confirmBeforeRun"])
+
     def test_history_page_is_paginated_and_filterable(self) -> None:
         with TemporaryDirectory() as folder:
             root = Path(folder)

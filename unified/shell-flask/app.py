@@ -1,10 +1,9 @@
 """Flask 版基础数据审核工具（统一外壳：Windows + UOS/麒麟 共用一份）。
 
 复用 unified/core 的唯一业务核心（base_audit 后端 + frontend 前端）：
-- 前端 index.html 不做修改，由本模块在 ``<head>`` 注入一个 ``pywebview.api``
-  兼容层，把 ``pywebview.api.方法名(...)`` 代理为 ``POST /api/方法名``。
-- 后端直接继承 ``base_audit.web_app.WebApi``，只把 pywebview 的文件选择
-  对话框替换为 tkinter 本机对话框，窗口控制按钮改为无操作（浏览器窗口由
+- 前端 index.html 不做修改，由本模块在 ``<head>`` 注入一个 ``bridge.api``
+  兼容层，把 ``bridge.api.方法名(...)`` 代理为 ``POST /api/方法名``。
+- 后端直接继承 ``base_audit.web_app.WebApi``，文件选择对话框使用 tkinter，窗口控制按钮改为无操作（浏览器窗口由
   用户自己管理）。
 - 平台差异只有“打开文件/目录”：Windows 用 os.startfile，UOS/麒麟 用
   xdg-open；计算引擎选项由 core/base_audit/engines 按操作系统提供
@@ -107,7 +106,7 @@ class FlaskApi(WebApi):
                 if field == "input" and not self.state["outputPinned"]:
                     self.state["output"] = str(Path(value) / "执行结果")
                     self.state["outputAuto"] = True
-                # 与 pywebview 版一致：仅选择源数据目录触发一次模板推荐。
+                # 仅选择源数据目录时触发一次模板推荐。
                 self._recognize(allow_template_auto=(field == "input"))
             elif field == "output":
                 self.state["outputAuto"] = False
@@ -208,8 +207,8 @@ class FlaskApi(WebApi):
         return None
 
 
-# 把 pywebview.api.method(...) 代理到 POST /api/method 的兼容层。
-# 页面其余脚本一行不改；pywebviewready 事件在页面加载完成后派发。
+# 把 bridge.api.method(...) 代理到 POST /api/method 的桥接层。
+# 页面其余脚本一行不改；bridgeready 事件在页面加载完成后派发。
 _BRIDGE_JS = """
 <script>
 (function () {
@@ -231,9 +230,9 @@ _BRIDGE_JS = """
       };
     }
   });
-  window.pywebview = { api: api };
+  window.bridge = { api: api };
   window.addEventListener('load', function () {
-    window.dispatchEvent(new Event('pywebviewready'));
+    window.dispatchEvent(new Event('bridgeready'));
   });
 })();
 </script>

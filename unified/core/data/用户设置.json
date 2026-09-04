@@ -8,6 +8,7 @@
   "output_pinned": false,
   "recursive_folders": true,
   "write_flow_logs": false,
+  "confirm_before_run": true,
   "calculation_engine": "自动",
   "show_custom_features": false,
   "favorite_input_dirs": [],

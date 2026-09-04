@@ -105,10 +105,10 @@
 ### unified 线同步规则（活跃开发约定）
 
 - 业务功能一律改 `unified/core/`（后端 `src/base_audit`、前端 `frontend/web/index.html`、测试 `tests/`），两个外壳 `unified/shell-flask/`、`unified/shell-pywebview/` 只放平台差异，不得各自复制业务代码。
-- 前端接口写法为 `pywebview.api.方法名(...)`——这是 unified 现行的历史命名，指核心的 `web_app.py`，**不是** `external/pywebview2/` 归档项目；shell-flask 通过注入桥接层把它代理为 `POST /api/方法名`。改接口先改 core 的 `web_app.py`，外壳不写接口。
+- 前后端唯一接口是桥接层：前端调用 `bridge.api.方法名(...)`（`window.bridge`，就绪事件 `bridgeready`）。shell-flask 注入 fetch 代理为 `POST /api/方法名`；shell-pywebview 由 `web_app.launch_web` 注入别名垫片（`bridge = 原生 pywebview`）。改接口先改 core 的 `web_app.py`，外壳不写接口。**活跃代码中不得再出现 `pywebview` 字样**——"pywebview" 只指 `external/pywebview2/` 归档项目。
 - 平台差异（Excel/WPS COM 与 LibreOffice UNO）封装在 `unified/core/src/base_audit/engines/`；业务流程层不得直接判断 COM、UNO 或操作系统。
 - 改动后在 Windows 上运行 unified/core 的 pytest 全绿才可合入；UOS/LibreOffice 专属路径需在真实 UOS 环境验收。
-- `external/Flask/` 中存在三项 unified 尚未包含的改进（执行前确认弹窗、外部公式批量读性能修复、bridge.api 改名），移植前不得删除该归档。
+- `external/Flask/` 的三项改进（执行前确认弹窗、外部公式批量读性能修复、bridge.api 改名）已于 2026-09-04 移植入 unified，归档仅作历史留存。
 
 ## 跨平台统一架构与发布
 

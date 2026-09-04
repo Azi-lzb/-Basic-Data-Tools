@@ -187,6 +187,8 @@ select:disabled{opacity:.6;cursor:not-allowed}
 .confirm-card{width:340px;max-width:calc(100vw - 48px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:20px 22px}
 .confirm-title{margin:0 0 8px;font-size:15px;font-weight:700;color:var(--text)}
 .confirm-msg{margin:0 0 18px;font-size:13px;color:var(--text-2);line-height:1.7;white-space:pre-line}
+.confirm-files{margin:0 0 18px;padding:8px 12px;list-style:none;max-height:200px;overflow:auto;background:var(--bg,#f6f8fa);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-2);line-height:1.9}
+.confirm-files li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .confirm-actions{display:flex;justify-content:flex-end;gap:10px}
 .about-mask{display:none;position:fixed;inset:0;z-index:51;background:rgba(12,22,38,.45);align-items:center;justify-content:center}
 .about-card{width:520px;max-width:calc(100vw - 48px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:20px 24px}
@@ -462,7 +464,7 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
 </head>
 <body>
 
-<header class="topbar pywebview-drag-region" id="titlebar">
+<header class="topbar app-drag-region" id="titlebar">
   <div class="brand">
     <div class="brand-icon" data-tip="Supported by HZPBC"><img src="data:image/png;base64,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" alt=""></div>
     <div>
@@ -642,6 +644,7 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
   <div class="confirm-card" onclick="event.stopPropagation()">
     <p class="confirm-title" id="confirmTitle">确认执行</p>
     <p class="confirm-msg" id="confirmMsg"></p>
+    <ul class="confirm-files" id="confirmFiles" hidden></ul>
     <div class="confirm-actions">
       <button class="btn" id="confirmCancel" onclick="confirmRun(false)">取消</button>
       <button class="btn primary" id="confirmOk" onclick="confirmRun(true)">执行</button>
@@ -742,32 +745,32 @@ const ICON={
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function shortName(p){p=String(p==null?'':p).replace(/[\\/]+$/,'');const i=Math.max(p.lastIndexOf('\\'),p.lastIndexOf('/'));return i>=0?p.slice(i+1):p}
 function values(){let o={};fields.forEach(x=>o[x]=state[x]||'');return o}
-async function sync(){await pywebview.api.update(values())}
+async function sync(){await bridge.api.update(values())}
 async function pick(f,t){
   await sync();
-  let v=t==='folder'?await pywebview.api.choose_folder(f):await pywebview.api.choose_file(f);
+  let v=t==='folder'?await bridge.api.choose_folder(f):await bridge.api.choose_file(f);
   if(v){
     state[f]=v;
     const o=values();
     if(f==='input')delete o.output;   // 修改源数据目录时不要推送输出目录，由后端保持跟随/图钉状态
-    await pywebview.api.update(o);
+    await bridge.api.update(o);
   }
   await refresh();
 }
 async function pickHistoryConfig(){
-  await pywebview.api.choose_history_config();
+  await bridge.api.choose_history_config();
   await refresh();
 }
-function winMin(){if(window.pywebview)pywebview.api.win_minimize()}
+function winMin(){if(window.bridge)bridge.api.win_minimize()}
 function winMax(){
-  if(!window.pywebview)return;
+  if(!window.bridge)return;
   const btn=document.getElementById('winMaxBtn'),isMax=btn&&btn.dataset.max==='1';
-  pywebview.api.win_maximize(!!isMax);
+  bridge.api.win_maximize(!!isMax);
   if(btn){btn.dataset.max=isMax?'':'1';btn.title=isMax?'最大化':'还原'}
 }
-function winClose(){if(window.pywebview)pywebview.api.win_close()}
+function winClose(){if(window.bridge)bridge.api.win_close()}
 document.getElementById('titlebar').addEventListener('dblclick',e=>{if(!e.target.closest('button'))winMax()});
-async function recognize(){await sync();await pywebview.api.recognize();await refresh()}
+async function recognize(){await sync();await bridge.api.recognize();await refresh()}
 /* ============ 设置中心 ============ */
 const CFG={data:null,draft:{customModules:[],customFlows:[],flowDisplay:{},combineSheetsPlans:[],activeCombineSheetsPlanId:''},emptyFlows:[],dirty:false,
   tab:'general',selModule:-1,selFlow:null,selStep:-1,flowNameMode:null,saving:false,_statusTimer:null,origCombinePlanId:''};
@@ -928,7 +931,7 @@ async function openSettings(){
   showSettingsPaneLoading();
   setSettingsTab('general');
   try{
-    const data=await pywebview.api.get_config_editor_data();
+    const data=await bridge.api.get_config_editor_data();
     CFG.data=data;
     CFG.draft={customModules:draftModulesFrom(data),customFlows:deepCopy([].concat(data.defaultFlows||[],data.customFlows||[])),flowDisplay:deepCopy(data.flowDisplay||{}),combineSheetsPlans:combinePlanDrafts(data.combineSheetsPlans),activeCombineSheetsPlanId:String((data&&data.activeCombineSheetsPlanId)||'')};
     CFG.origCombinePlanId=String((data&&data.activeCombineSheetsPlanId)||'');
@@ -1031,6 +1034,11 @@ function renderGeneral(){
     +'<span><span class="setting-name">输出流程运行日志</span>'
     +'<span class="setting-desc">关闭后不生成“流程名_运行日志_时间戳.xlsx”，页面运行记录仍保留。</span></span>'
     +'</label>'
+    +'<label class="setting-row" title="勾选后，点击主界面执行按钮先弹出待处理文件清单，确认后才开始运行；自定义流程同样适用">'
+    +'<input type="checkbox" id="setConfirmBeforeRun" onchange="setConfirmBeforeRun(this.checked)">'
+    +'<span><span class="setting-name">执行前确认文件清单</span>'
+    +'<span class="setting-desc">点击主界面执行按钮时先弹出本次要处理的文件清单，确认后才开始运行，避免误点直接跑批。</span></span>'
+    +'</label>'
     +'</div>'
     +'<div class="general-group">'
     +'<div class="general-group-title">界面</div>'
@@ -1062,23 +1070,26 @@ function syncGeneralControls(){
   if(rec){rec.checked=!!s.recursive;rec.disabled=!!s.busy;const r=rec.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy)}
   const lg=document.getElementById('setWriteFlowLogs');
   if(lg){lg.checked=!!s.writeFlowLogs;lg.disabled=!!s.busy;const r=lg.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy)}
+  const cb=document.getElementById('setConfirmBeforeRun');
+  if(cb){cb.checked=(s.confirmBeforeRun!==false);cb.disabled=!!s.busy;const r=cb.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy)}
   const sc=document.getElementById('setShowCustom');
   if(sc){sc.checked=!!s.showCustomFeatures;sc.disabled=!!s.busy;const r=sc.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy)}
   const engine=String(s.calculationEngine||'自动');
   document.querySelectorAll('input[name=calcEngine]').forEach(r=>{r.checked=(r.value===engine);r.disabled=!!s.busy});
   document.querySelectorAll('input[name=logMode]').forEach(r=>{r.checked=((r.value==='全量')===!!logFull);r.disabled=!!s.busy});
 }
-async function setRecursive(checked){await pywebview.api.update({recursive:checked});await refresh()}
-async function setWriteFlowLogs(checked){await pywebview.api.update({writeFlowLogs:checked})}
+async function setRecursive(checked){await bridge.api.update({recursive:checked});await refresh()}
+async function setWriteFlowLogs(checked){await bridge.api.update({writeFlowLogs:checked})}
+async function setConfirmBeforeRun(checked){await bridge.api.update({confirmBeforeRun:checked})}
 async function setShowCustom(checked){
-  await pywebview.api.update({showCustomFeatures:checked});
+  await bridge.api.update({showCustomFeatures:checked});
   const cf=document.querySelector('.custom-field');
   if(cf)cf.style.display=checked?'block':'none';
   refreshCustomButtons();
 }
 async function setEngine(value){
   if(state&&state.busy)return;
-  try{await pywebview.api.update({calculationEngine:value})}catch(e){}
+  try{await bridge.api.update({calculationEngine:value})}catch(e){}
   if(state)state.calculationEngine=value;
 }
 /* ---- 模块说明：模块由代码实现，只读展示 ---- */
@@ -1524,9 +1535,9 @@ async function saveSettings(){
   CFG.saving=true;updateSaveBtn();
   try{
     const draft={customModules:CFG.draft.customModules,customFlows:CFG.draft.customFlows,flowDisplay:CFG.draft.flowDisplay,combineSheetsPlans:combinePlanDicts(CFG.draft.combineSheetsPlans),activeCombineSheetsPlanId:String(CFG.draft.activeCombineSheetsPlanId||'')};
-    const validation=await pywebview.api.validate_config_editor_draft(draft);
+    const validation=await bridge.api.validate_config_editor_draft(draft);
     if(!validation.valid){showSettingsErrors(validation.errors||['设置不合法']);return}
-    const saved=await pywebview.api.save_config_editor_draft(draft);
+    const saved=await bridge.api.save_config_editor_draft(draft);
     if(!saved.ok){showSettingsErrors(saved.errors||['保存失败']);return}
     if(saved.data)CFG.data=saved.data;
     CFG.draft={customModules:draftModulesFrom(CFG.data),customFlows:deepCopy([].concat(CFG.data.defaultFlows||[],CFG.data.customFlows||[])),flowDisplay:deepCopy(CFG.data.flowDisplay||{}),combineSheetsPlans:combinePlanDrafts(CFG.data.combineSheetsPlans),activeCombineSheetsPlanId:String((CFG.data&&CFG.data.activeCombineSheetsPlanId)||'')};
@@ -1544,13 +1555,13 @@ async function saveSettings(){
     CFG.saving=false;updateSaveBtn();
   }
 }
-async function toggleOutputPin(){const v=!state.outputPinned;await pywebview.api.update({outputPinned:v});await refresh()}
-async function openPath(p){await pywebview.api.open_path(p);await refresh()}
-async function openGuide(){await pywebview.api.open_user_guide()}
+async function toggleOutputPin(){const v=!state.outputPinned;await bridge.api.update({outputPinned:v});await refresh()}
+async function openPath(p){await bridge.api.open_path(p);await refresh()}
+async function openGuide(){await bridge.api.open_user_guide()}
 function openAbout(){document.getElementById('aboutMask').style.display='flex'}
 function closeAbout(){document.getElementById('aboutMask').style.display='none'}
 let customFeatures=[],pendingConfirm=null;
-async function loadCustom(){customFeatures=await pywebview.api.get_custom_features()||[];renderCustom(customFeatures)}
+async function loadCustom(){customFeatures=await bridge.api.get_custom_features()||[];renderCustom(customFeatures)}
 /* 设置中心保存成功后调用：立即刷新主界面的显示流程 */
 function refreshCustomButtons(){loadCustom()}
 function renderCustom(features){
@@ -1565,22 +1576,43 @@ function renderCustom(features){
 }
 function askRun(id){
   const f=customFeatures.find(x=>x.id===id)||{};
-  pendingConfirm={type:'custom',id};
-  document.getElementById('confirmTitle').textContent='自定义流程';
-  document.getElementById('confirmOk').textContent='执行';
-  document.getElementById('confirmMsg').textContent='是否执行「'+(f.name||id)+'」？';
-  document.getElementById('confirmMask').style.display='flex';
+  maybeConfirmRun(f.name||id,function(){return bridge.api.run_custom(id)});
 }
 function confirmRun(ok){
   document.getElementById('confirmMask').style.display='none';
+  document.getElementById('confirmFiles').hidden=true;
   if(!ok||!pendingConfirm)return;
   const c=pendingConfirm;pendingConfirm=null;
-  if(c.type==='reset'){doResetConfig();}
+  if(c.type==='run'&&c.run){c.run();}
+  else if(c.type==='reset'){doResetConfig();}
   else if(c.type==='resetEditorPart'){doResetEditorPart(c.part);}
   else if(c.type==='templateMerge'){doCreateTemplateMerge();}
   else if(c.type==='discardSettings'){closeSettings(true);}
   else if(c.type==='delFlow'){doDeleteFlow(c.name);}
   else{runCustom(c.id);}
+}
+/* 执行前确认：设置开启时，主按钮先弹出待处理文件清单，确认后才开始执行。
+   label 为流程/动作名；run 为确认后要执行的动作。 */
+function maybeConfirmRun(label,run){
+  const invoke=async function(){await run();await refresh()};
+  if(!state||!state.confirmBeforeRun||state.busy){invoke();return}
+  const paths=checkedPaths();
+  const names=paths.map(function(p){return p.split(/[\/]/).pop()});
+  pendingConfirm={type:'run',run:invoke};
+  document.getElementById('confirmTitle').textContent='确认执行：'+label;
+  document.getElementById('confirmOk').textContent='确认执行';
+  document.getElementById('confirmMsg').textContent=names.length
+    ?('将处理以下 '+names.length+' 个文件：')
+    :'当前未勾选待处理文件；部分流程将按源数据目录中识别到的全部文件执行。';
+  const list=document.getElementById('confirmFiles');
+  list.innerHTML='';
+  names.forEach(function(name){
+    const li=document.createElement('li');
+    li.textContent=name;
+    list.appendChild(li);
+  });
+  list.hidden=!names.length;
+  document.getElementById('confirmMask').style.display='flex';
 }
 function selectCustomFlow(i){
   const defaults=(CFG.data&&CFG.data.defaultFlowNames)||[];
@@ -1614,7 +1646,7 @@ function doResetEditorPart(part){
   showSettingsStatus('已恢复初始流程草稿并清除主界面显示设置；点击“保存设置”后生效。');
   setDirty();renderFlows();
 }
-async function runCustom(id){await pywebview.api.run_custom(id);await refresh()}
+async function runCustom(id){await bridge.api.run_custom(id);await refresh()}
 function askResetConfig(){
   pendingConfirm={type:'reset'};
   document.getElementById('confirmTitle').textContent='恢复默认设置';
@@ -1624,7 +1656,7 @@ function askResetConfig(){
 }
 async function doResetConfig(){
   try{
-    await pywebview.api.reset_config();
+    await bridge.api.reset_config();
   }catch(e){
     const msg=(e&&e.message)?e.message:String(e);
     alert('恢复默认失败：'+msg);
@@ -1632,7 +1664,7 @@ async function doResetConfig(){
   await refresh();
   if(CFG.data){ /* 设置中心打开时同步内置模块与草稿 */
     try{
-      const data=await pywebview.api.get_config_editor_data();
+      const data=await bridge.api.get_config_editor_data();
       CFG.data=data;
       CFG.draft={customModules:draftModulesFrom(data),customFlows:deepCopy([].concat(data.defaultFlows||[],data.customFlows||[])),flowDisplay:deepCopy(data.flowDisplay||{}),combineSheetsPlans:combinePlanDrafts(data.combineSheetsPlans),activeCombineSheetsPlanId:String((data&&data.activeCombineSheetsPlanId)||'')};
       CFG.origCombinePlanId=String((data&&data.activeCombineSheetsPlanId)||'');
@@ -1676,18 +1708,18 @@ function createTemplateMerge(){
 }
 async function doCreateTemplateMerge(){
   try{
-    await pywebview.api.create_template_merge();
+    await bridge.api.create_template_merge();
   }catch(e){
     const msg=(e&&e.message)?e.message:String(e);
     alert('制作联合模板失败：'+msg);
   }
   await refresh();
 }
-/* 只允许顶栏（pywebview-drag-region）拖动窗口；其余区域保留文字选取等原生行为。
-   pywebview 的 easy_drag 会把整窗注册为拖拽区，这里在捕获阶段拦截非拖拽区的 mousedown，
+/* 只允许顶栏（app-drag-region）拖动窗口；其余区域保留文字选取等原生行为。
+   宿主窗口的 easy_drag 会把整窗注册为拖拽区，这里在捕获阶段拦截非拖拽区的 mousedown，
    运行日志等处才能正常拖选复制。stopPropagation 不影响默认行为（选取/点击/聚焦）。 */
 document.addEventListener('mousedown',e=>{
-  if(e.target&&e.target.closest&&e.target.closest('.pywebview-drag-region'))return;
+  if(e.target&&e.target.closest&&e.target.closest('.app-drag-region'))return;
   e.stopPropagation();
 },true);
 document.addEventListener('keydown',e=>{
@@ -1697,11 +1729,12 @@ document.addEventListener('keydown',e=>{
   closeSettings();
 });
 function checkedPaths(){return [...document.querySelectorAll('.file-check:checked')].map(x=>x.value)}
-async function sendSelection(){await pywebview.api.set_selected_files(checkedPaths())}
+async function sendSelection(){await bridge.api.set_selected_files(checkedPaths())}
 async function selectAll(checked){document.querySelectorAll('.file-check').forEach(x=>x.checked=checked);await sendSelection();await refresh()}
-// Win7 兼容：主按钮一次调用同步表单、勾选文件并启动，避免 pywebview 5 连续多次调用卡住
-async function start(a){lastAction=a;await pywebview.api.start_with_state(a,values(),checkedPaths());await refresh()}
-async function startFlow(flow,action){lastAction=action;await pywebview.api.start_flow_with_state(flow,values(),checkedPaths());await refresh()}
+// 主按钮一次调用同步表单、勾选文件并启动（桥接层单请求语义，避免连续多次调用）
+const RUN_LABELS={check:'审核前检查',audit:'汇总核查表校验',summary:'汇总校验结果说明'};
+async function start(a){lastAction=a;maybeConfirmRun(RUN_LABELS[a]||a,function(){return bridge.api.start_with_state(a,values(),checkedPaths())});}
+async function startFlow(flow,action){lastAction=action;maybeConfirmRun(flow,function(){return bridge.api.start_flow_with_state(flow,values(),checkedPaths())});}
 function startMerge(){setMergeMode(true,false);startFlow(MERGE_FLOW,'merge')}
 async function copyLog(){
   const log=document.getElementById('log');
@@ -1786,7 +1819,7 @@ function renderExplanation(s){
   }).join('');
 }
 async function refresh(){
-  let s=await pywebview.api.get_state();state=s;
+  let s=await bridge.api.get_state();state=s;
   fields.forEach(x=>{
     const box=document.getElementById(x+'Name'),full=s[x]||'';
     if(!box)return;
@@ -1851,12 +1884,12 @@ async function refresh(){
   });
   setMergeMode(!!s.busy && lastAction==='merge', false);
 }
-window.addEventListener('pywebviewready',()=>{refresh();loadCustom()});
+window.addEventListener('bridgeready',()=>{refresh();loadCustom()});
 document.getElementById('explanationList').addEventListener('click',e=>{
   const row=e.target&&e.target.closest('.explanation-row');
   if(row&&row.dataset.path)openPath(row.dataset.path);
 });
-setInterval(()=>{if(window.pywebview)refresh()},800);
+setInterval(()=>{if(window.bridge)refresh()},800);
 </script>
 </body>
 </html>
