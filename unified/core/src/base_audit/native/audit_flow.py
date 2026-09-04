@@ -43,6 +43,7 @@ from .openpyxl_workbook import (
     extract_issues,
     named_ranges,
     read_template,
+    template_formulas,
     template_structure_values,
 )
 
@@ -89,17 +90,6 @@ class NativeAuditResult:
         if self.performance_lines:
             parts.append("耗时分解：" + "；".join(self.performance_lines))
         return "\n".join(parts)
-
-
-def _template_formulas(template_path: Path) -> list[object]:
-    book = load_workbook(template_path, read_only=True, data_only=False, keep_links=False)
-    try:
-        return [
-            cell.value for sheet in book.worksheets for row in sheet.iter_rows() for cell in row
-            if isinstance(cell.value, str) and cell.value.startswith("=")
-        ]
-    finally:
-        book.close()
 
 
 def _sha256(path: Path) -> str:
@@ -230,7 +220,7 @@ def run_native_audit(
         external = load_workbook(external_path, read_only=True, data_only=False, keep_links=False)
         try:
             external_plan = make_external_sheet_plan(
-                formulas=_template_formulas(template_path), available_sheets=external.sheetnames,
+                formulas=template_formulas(template_path), available_sheets=external.sheetnames,
             )
         finally:
             external.close()

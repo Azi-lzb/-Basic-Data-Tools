@@ -81,6 +81,18 @@ def _in_range(cell: str, address: str) -> bool:
     return min_row <= row <= max_row and min_col <= column <= max_col
 
 
+def template_formulas(template_path: Path) -> list[object]:
+    """收集模板全部公式文本（外部文件规划用；每个流程只读一次）。"""
+    book = load_workbook(template_path, read_only=True, data_only=False, keep_links=False)
+    try:
+        return [
+            cell.value for sheet in book.worksheets for row in sheet.iter_rows() for cell in row
+            if isinstance(cell.value, str) and cell.value.startswith("=")
+        ]
+    finally:
+        book.close()
+
+
 def named_ranges(workbook: Any, mappings: Iterable[FeatureMapping]) -> list[CopyRange]:
     """Resolve configured Excel names to individual areas.
 

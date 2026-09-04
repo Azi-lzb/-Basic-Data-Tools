@@ -185,9 +185,8 @@ class ExcelSession:
 
         if sys.platform != "win32":
             raise ExcelUnavailableError(
-                "当前操作系统不支持 Excel/WPS COM。统信 UOS / 麒麟版需使用 "
-                "LibreOffice Calc/UNO 计算引擎（适配进行中），Windows 版请使用 "
-                "Flask/windows 或 pywebview2/windows 发行包。"
+                "当前操作系统不支持 Excel/WPS COM。统信 UOS / 麒麟版已由原生管线"
+                "（LibreOffice Calc + openpyxl）自动接管；此会话仅在 Windows 可用。"
             )
         try:
             import pythoncom

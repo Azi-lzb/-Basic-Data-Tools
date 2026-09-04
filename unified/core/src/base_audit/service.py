@@ -10,6 +10,7 @@ from typing import Any, Callable, Optional
 
 from .discovery import source_workbooks
 from .excel_com import ExcelSession
+from .region_summary import RegionSummaryItem, RegionSummaryResult
 from .external import ExternalSheetPlan, make_external_sheet_plan
 from .history import (
     HISTORY_AUDIT_SHEET,
@@ -205,13 +206,46 @@ class AuditService:
         feature_log: Optional[FeatureLog] = None,
         copies_dir: Path | None = None,
     ) -> "RegionSummaryResult":
+        from .engines import pipeline_kind
         from .name_config import load_flow_features
-        from .region_summary import run_region_summaries
+
         if self.config_path is None:
             raise ValueError("汇总功能需要历史审核配置.xlsx")
         flow_features = load_flow_features(self.config_path, flow_name) if flow_name else None
         if flow_name and not flow_features:
             raise ValueError(f"执行流程“{flow_name}”没有启用的功能")
+        if pipeline_kind(self.engine_preference) == "native":
+            from .native.summary import merge_workbook_tables, run_region_summaries as native_run_region_summaries
+
+            if named_range_features:
+                features = list(named_range_features)
+            elif flow_name:
+                names = flow_features
+                mappings = {item.name: item for item in load_feature_mappings(self.config_path, template_path)}
+                features = [mappings[name] for name in names if name in mappings]
+            else:
+                features = []
+            merge_features = [item for item in features if item.feature_type == WORKBOOK_TABLE_MERGE_FUNCTION]
+            row_features = [item for item in features if item.feature_type != WORKBOOK_TABLE_MERGE_FUNCTION]
+            output_dir = output_dir.resolve()
+            if merge_features and not row_features:
+                path = merge_workbook_tables(
+                    input_dir=input_dir, output_dir=output_dir, recursive=recursive,
+                    selected_files=selected_files, on_step=on_step,
+                    output_name=output_name or "汇总表合并",
+                )
+                return RegionSummaryResult(output_path=path, items=[RegionSummaryItem("汇总表合并", 0, "")])
+            if not row_features:
+                raise ValueError("没有启用“汇总_任意行汇总”或“汇总_固定行汇总”模块")
+            path = native_run_region_summaries(
+                template_path=template_path, input_dir=input_dir, output_dir=output_dir,
+                features=row_features, recursive=recursive, selected_files=selected_files,
+                on_step=on_step, output_name=output_name or "区域汇总",
+                history_config_path=self.config_path,
+            )
+            items = [RegionSummaryItem(item.name, 0, "") for item in row_features]
+            return RegionSummaryResult(output_path=path, items=items)
+        from .region_summary import run_region_summaries
         return run_region_summaries(
             template_path=template_path,
             input_dir=input_dir,
@@ -318,6 +352,11 @@ class AuditService:
         manual, low-frequency template authoring action and never examines the
         workbench's source-data or auto-matched template fields.
         """
+        from .engines import pipeline_kind
+
+        if pipeline_kind(self.engine_preference) == "native":
+            raise ValueError("制作联合模板暂仅支持 Windows 外壳（Excel/WPS COM）；统信 UOS 版暂不提供该功能。")
+
         return run_template_merge(
             base_template=base_template,
             source_templates=source_templates,
@@ -609,6 +648,24 @@ class AuditService:
         named_range_features: tuple[tuple[int, FeatureMapping], ...] = (),
         feature_log: Optional[FeatureLog] = None,
     ) -> PreflightRunResult:
+        from .engines import pipeline_kind
+
+        if pipeline_kind(self.engine_preference) == "native":
+            from .native.preflight import run_native_preflight
+
+            return run_native_preflight(
+                template_path=template_path,
+                input_dir=input_dir,
+                output_dir=output_dir,
+                config_path=self.config_path,
+                selected_files=selected_files,
+                external_path=external_path,
+                recursive=recursive,
+                write_report=write_report,
+                on_step=on_step,
+                named_range_features=named_range_features,
+                feature_log=feature_log,
+            )
         template_path = template_path.resolve()
         input_dir = input_dir.resolve()
         output_dir = output_dir.resolve()
@@ -806,6 +863,25 @@ class AuditService:
         strict: bool = True,
         effective_sources: dict[int, str | None] | None = None,
     ) -> AuditRunResult:
+        from .engines import pipeline_kind
+
+        if pipeline_kind(self.engine_preference) == "native":
+            from .native.audit_flow import run_native_audit
+
+            return run_native_audit(
+                template_path=template_path,
+                input_dir=input_dir,
+                output_dir=output_dir,
+                config_path=self.config_path,
+                history_path=history_path,
+                period=period,
+                external_path=external_path,
+                selected_files=selected_files,
+                recursive=recursive,
+                on_step=on_step,
+                write_summary=True,
+                update_history=True,
+            )
         template_path = template_path.resolve()
         input_dir = input_dir.resolve()
         output_dir = output_dir.resolve()

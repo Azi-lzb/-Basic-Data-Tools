@@ -271,3 +271,79 @@ def test_region_summary_appends_history_columns_only_for_identity_sheets(tmp_pat
     assert last_row[4] == "R1"    # 0来源文件 1来源工作表 2批次 3表单名称 4规则编号
     assert last_row[-3:] == ["1", "利率超限", "待整改"]  # join 后为字符串
     out.close()
+
+
+# ---------------------------------------------------------------------------
+# service 入口分派（preflight / summarize_regions / run / merge_template_files）
+# ---------------------------------------------------------------------------
+
+def _service(tmp_path: Path):
+    from base_audit.name_config import initialize_config
+    from base_audit.service import AuditService
+    history = tmp_path / "历史审核配置.xlsx"
+    initialize_config(history)
+    return AuditService(config_path=history)
+
+
+def test_preflight_dispatches_to_native_on_linux(tmp_path: Path) -> None:
+    from unittest.mock import patch
+    from base_audit import engines
+    template = tmp_path / "模板.xlsx"
+    _make_template(template)
+    source = tmp_path / "源" / "机构A.xlsx"
+    source.parent.mkdir()
+    book = Workbook(); book.active.title = "报表"; book.active["C2"] = 5
+    book.save(source); book.close()
+
+    def fake_find(*args, **kwargs):
+        return None
+
+    with patch.object(sys, "platform", "linux"), patch.object(
+        engines.libreoffice, "find_calc_engine", fake_find
+    ):
+        service = _service(tmp_path)
+        result = service.preflight(
+            template_path=template, input_dir=source.parent, output_dir=tmp_path / "输出",
+            recursive=False, write_report=False,
+        )
+    assert result.total_files == 1 and result.matched_files == 1
+    assert "审核前检查完成" in result.summary_text()
+
+
+def test_merge_template_files_rejected_on_linux(tmp_path: Path) -> None:
+    from unittest.mock import patch
+    with patch.object(sys, "platform", "linux"):
+        service = _service(tmp_path)
+        with pytest.raises(ValueError, match="暂仅支持 Windows"):
+            service.merge_template_files(
+                base_template=tmp_path / "a.xlsx", source_templates=[tmp_path / "b.xlsx"],
+            )
+
+
+def test_cli_run_dispatches_to_native(tmp_path: Path, monkeypatch) -> None:
+    """run()（CLI 审核入口）在 native 分支用 LibreOfficeCalculator（此处 mock 重算）。"""
+    from unittest.mock import patch
+    from base_audit import engines
+
+    template = tmp_path / "模板.xlsx"
+    _make_template(template)
+    source = tmp_path / "源" / "机构A.xlsx"
+    source.parent.mkdir()
+    book = Workbook(); book.active.title = "报表"; book.active["C2"] = 5
+    book.save(source); book.close()
+
+    def fake_recalculate(self, workbook_path):
+        from base_audit.engines.libreoffice import LibreOfficeCalculationResult
+        return LibreOfficeCalculationResult(
+            workbook_path=workbook_path, engine_display="LibreOffice Calc (mock)", elapsed_seconds=0.0,
+        )
+
+    with patch.object(sys, "platform", "linux"), patch.object(
+        engines.libreoffice.LibreOfficeCalculator, "recalculate", fake_recalculate
+    ), patch.object(engines.libreoffice.LibreOfficeCalculator, "require_available", lambda self: None):
+        service = _service(tmp_path)
+        result = service.run(
+            template_path=template, input_dir=source.parent, output_dir=tmp_path / "输出",
+            period="2026-08", history_path=tmp_path / "历史审核配置.xlsx", recursive=False,
+        )
+    assert result.successful_files == 1 and result.failed_files == 0
