@@ -1,6 +1,6 @@
 @echo off
 rem Build the unified Flask shell EXE (modern Windows, Python 3.8+).
-rem Output: dist\BasicAudit_Flask.exe + dist\core\
+rem Output: dist\<Flask exe>.exe + dist\core\
 cd /d "%~dp0"
 set PY=
 python -c "import sys" >nul 2>nul && set PY=python

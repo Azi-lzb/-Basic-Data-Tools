@@ -76,19 +76,18 @@
 
 ### 当前项目目录（优先于上方历史目录图）
 
-根目录的活跃发行线是 `Flask/`（一套共享核心 + 两个平台外壳）；`pywebview2/` 与 `flet/` 为冻结基线，只作对照，不再开发新功能。不得再在根目录创建 `src/`、`frontend/`、`packaging/`、`tests/`、`tools/` 或 `uos_audit/`：
+根目录的活跃发行线是 `unified/`（core 共享核心 + shell-flask / shell-pywebview 双外壳，含 engines 引擎适配层）；`external/pywebview2/`、`external/Flask/`、`flet/` 均为归档/冻结基线（各目录下有归档说明），只作对照，不再开发新功能。不得再在根目录创建 `src/`、`frontend/`、`packaging/`、`tests/`、`tools/` 或 `uos_audit/`：
 
 ```text
 .
-├─ Flask/                    # 活跃发行线：一套共享核心 + 两个平台外壳
-│  ├─ shared/                # 唯一业务核心：src/base_audit + frontend/web + tests/
-│  │                         #   引擎列表按操作系统提供（Win: Excel/WPS；UOS: LibreOffice）
-│  ├─ windows/               # Windows 外壳：app.py(Flask+tkinter 对话框)、run.py、
-│  │                         #   启动Flask-windows.bat、历史审核配置.xlsx、data/
-│  └─ uos/                   # UOS/麒麟 外壳：app.py(xdg-open)、run.py、启动Flask-UOS.sh、
-│                            #   历史审核配置.xlsx；LibreOffice Calc/UNO 引擎适配进行中，
-│                            #   移植来源 flet/uos/src/uos_audit/（calculation.py 等）
-├─ pywebview2/windows/ → 已归档至 external/pywebview2/（2026-09）
+├─ unified/                  # 活跃发行线：core 共享核心 + 双平台外壳
+│  ├─ core/                  # 唯一业务核心：src/base_audit（含 engines/ 引擎适配层：
+│  │                         #   protocol.py、excel_wps.py、libreoffice*.py）+ frontend/web + tests/
+│  ├─ shell-flask/           # Flask 外壳（本地服务 + 浏览器，面向 UOS/国产化）
+│  └─ shell-pywebview/       # pywebview 外壳（Windows 桌面窗口）
+├─ external/Flask/ → 已归档（2026-09-04，归档说明.md 在其目录下）
+│  # 前一代 Flask 线；含确认弹窗/公式批量读性能修复/bridge.api 改名等待移植改进
+├─ external/pywebview2/ → 已归档（2026-09-04，归档说明.md 在其目录下）
 │  # Windows pywebview 冻结基线；唯一 Win7 发行链路；只读对照，不再开发
 ├─ flet/windows/             # 冻结基线：Windows Flet 项目；仅 Excel/WPS COM
 │  ├─ main.py, run.py, src/, tests/, packaging/
@@ -103,12 +102,13 @@
 └─ AGENTS.md、CLAUDE.md 等    # 根目录共享协作与业务协议文件
 ```
 
-### Flask 线同步规则（活跃开发约定）
+### unified 线同步规则（活跃开发约定）
 
-- 业务功能一律改 `Flask/shared/`（后端 `src/base_audit`、前端 `frontend/web/index.html`、测试 `tests/`），两个外壳 `Flask/windows/`、`Flask/uos/` 只放平台差异，不得各自复制业务代码。
-- 前后端唯一接口是桥接层：前端调用 `bridge.api.方法名(...)`（`window.bridge`，就绪事件 `bridgeready`），外壳 `app.py` 把它代理为 `POST /api/方法名`；改接口先改 shared 的 `web_app.py`，外壳不写接口。**活跃代码中不得再出现 `pywebview` 字样**——"pywebview" 只指 `external/pywebview2/` 归档项目；历史文档里的 `pywebview.api` 即现在的 `bridge.api`。
-- 改动后在 Windows 上运行 `cd Flask/shared && PYTHONPATH=src python -m pytest tests/ -q` 全绿才可合入；UOS 专属路径需在真实 UOS 环境验收。
-- `Flask/shared` 的引擎列表、`ExcelSession` 平台拒绝逻辑是适配器边界，允许判断操作系统；业务流程层仍不得判断。
+- 业务功能一律改 `unified/core/`（后端 `src/base_audit`、前端 `frontend/web/index.html`、测试 `tests/`），两个外壳 `unified/shell-flask/`、`unified/shell-pywebview/` 只放平台差异，不得各自复制业务代码。
+- 前端接口写法为 `pywebview.api.方法名(...)`——这是 unified 现行的历史命名，指核心的 `web_app.py`，**不是** `external/pywebview2/` 归档项目；shell-flask 通过注入桥接层把它代理为 `POST /api/方法名`。改接口先改 core 的 `web_app.py`，外壳不写接口。
+- 平台差异（Excel/WPS COM 与 LibreOffice UNO）封装在 `unified/core/src/base_audit/engines/`；业务流程层不得直接判断 COM、UNO 或操作系统。
+- 改动后在 Windows 上运行 unified/core 的 pytest 全绿才可合入；UOS/LibreOffice 专属路径需在真实 UOS 环境验收。
+- `external/Flask/` 中存在三项 unified 尚未包含的改进（执行前确认弹窗、外部公式批量读性能修复、bridge.api 改名），移植前不得删除该归档。
 
 ## 跨平台统一架构与发布
 

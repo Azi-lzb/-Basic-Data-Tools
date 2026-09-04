@@ -32,10 +32,11 @@ Thumbs.db
 # ZCode 会话目录
 .zcode/
 
-# external 归档区：只放行 pywebview2 冻结基线（源码+dist），
+# external 归档区：只放行已归档的 pywebview2 与 Flask（源码+dist），
 # flutter 工具链(3.3G)/research/archives 不上传
 external/*
 !external/pywebview2/
+!external/Flask/
 
 # 运行时数据：历史审核配置（可能含真实机构历史问题）与流程配置不入库
 历史审核配置.xlsx

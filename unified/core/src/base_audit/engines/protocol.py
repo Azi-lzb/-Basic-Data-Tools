@@ -8,9 +8,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Protocol
+from typing import Iterable
+
+# typing.Protocol 自 Python 3.8 起提供；Win7 兼容链路（Python 3.7）退化为
+# 结构化鸭子类型——Calculator 仅作类型契约，无人显式继承。
+if sys.version_info >= (3, 8):
+    from typing import Protocol
+else:  # pragma: no cover - Win7 Python 3.7
+    Protocol = object
 
 
 @dataclass(frozen=True)

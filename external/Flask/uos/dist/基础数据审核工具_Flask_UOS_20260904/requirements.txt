@@ -1,0 +1,4 @@
+flask>=3.0
+openpyxl>=3.1
+# UOS/麒麟 正式链路只依赖目标系统安装的 LibreOffice Calc/UNO；
+# 不引入 pywin32、pywebview 或任何纯 Python 公式引擎。

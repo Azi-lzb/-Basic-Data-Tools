@@ -1,6 +1,6 @@
 @echo off
 rem Build the unified Flask shell EXE for Windows 7 (Python 3.7 + PyInstaller 4.10
-rem from the HZPBCwin7 conda env). Output: dist\BasicAudit_Flask_Win7.exe + dist\core\
+rem from the HZPBCwin7 conda env). Output: dist\<Flask Win7 exe>.exe + dist\core\
 cd /d "%~dp0"
 set PY=C:\Users\Azi\miniconda3\envs\HZPBCwin7\python.exe
 if not exist "%PY%" (
@@ -14,8 +14,16 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-rem Flask 2.2.5 is the last line supporting Python 3.7.
-"%PY%" -c "import flask" >nul 2>nul || "%PY%" -m pip install "flask==2.2.5" "werkzeug==2.2.3"
+rem Flask 2.2.5 is the last line supporting Python 3.7. The Win7 env pip has no
+rem SSL module, so prefer offline wheels in .\wheels when present.
+"%PY%" -c "import flask" >nul 2>nul
+if errorlevel 1 (
+  if exist wheels (
+    "%PY%" -m pip install --no-index --find-links wheels "flask==2.2.5" "werkzeug==2.2.3"
+  ) else (
+    "%PY%" -m pip install "flask==2.2.5" "werkzeug==2.2.3"
+  )
+)
 if errorlevel 1 (
   echo [ERROR] Failed to install flask 2.2.5 into HZPBCwin7.
   pause
