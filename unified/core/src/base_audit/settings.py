@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 MAX_RECENT_PATHS = 10
-CALCULATION_ENGINES = ("自动", "Microsoft Excel", "WPS 表格")
+CALCULATION_ENGINES = ("自动", "Microsoft Excel", "WPS 表格", "LibreOffice Calc")
 
 
 def hide_application_data_directory(path: Path) -> None:

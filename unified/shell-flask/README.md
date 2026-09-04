@@ -1,33 +1,50 @@
-# 基础数据审核工具（Flask / Windows 外壳）
+# 基础数据审核工具（Flask 外壳：Windows + 统信 UOS/麒麟）
 
-与 `Flask/uos` 共用 `Flask/shared` 的唯一业务核心（`base_audit` 后端 +
-`frontend` 前端 + `tests` 测试）。本目录只存放 Windows 外壳与运行数据。
+`unified/shell-flask` 是跨平台 Flask 外壳，与 `unified/shell-pywebview`（仅
+Windows）共用 `unified/core` 的唯一业务核心（`base_audit` 后端 +
+`frontend` 前端 + `tests` 测试）。本目录只放外壳与平台启动/打包脚本。
 
-## 目录职责
+## 架构
 
-- `app.py`：Flask 外壳。页面注入 `pywebview.api` 桥接层（前端 HTML 一字不改）；
-  继承 `WebApi`，把 pywebview 的文件对话框换成 tkinter，窗口控制按钮无操作。
-- `run.py`、`启动Flask-windows.bat`（ASCII + CRLF）：本地服务入口，默认
-  `http://127.0.0.1:8750/`。
-- `历史审核配置.xlsx`、`data/`：本机运行数据。
-- Excel/WPS COM 引擎在 `Flask/shared/src/base_audit/excel_com.py`（懒加载，
-  引擎列表按操作系统提供：Windows 显示 Excel/WPS，UOS 显示 LibreOffice Calc）。
+- **前后端唯一接口是桥接层**：页面注入脚本把 `bridge.api.方法名(...)`
+  代理为 `POST /api/方法名`，前端 HTML 两个平台一字不改。
+- **引擎按操作系统自动识别**（`core/base_audit/engines`）：
+  - Windows：Microsoft Excel / WPS 表格 COM；
+  - 统信 UOS/麒麟：LibreOffice Calc（`soffice --headless` 重算 +
+    openpyxl 原生管线，条件格式走 OOXML 规则求值，与 WPS 兜底同族）。
+- 平台差异收口：文件打开（`os.startfile` / `xdg-open`）、引擎列表、
+  计算管线（COM / native）均在 core 的 engines 与 native 包，外壳不判断。
 
-## 运行
+## Windows 运行与打包
 
 ```bat
-启动Flask-windows.bat
+启动Flask.bat                 :: 运行（默认 http://127.0.0.1:8750/）
+打包Flask.bat                 :: PyInstaller 成品 EXE（现代 Windows）
+打包Flask-Win7.bat            :: Win7 兼容版（Python 3.7 + 离线 wheels）
 ```
 
-或 `python run.py`（`--no-browser` 不自动开浏览器，`--port` 改端口）。
+## 统信 UOS/麒麟 运行与打包
+
+```sh
+./启动Flask-UOS.sh            # 运行（python3 + flask + openpyxl）
+./打包Flask-UOS.sh            # 源码发行包 zip/tar.gz + SHA256
+```
+
+UOS 环境要求：python3、`pip3 install -r requirements.txt`（pywin32 在
+Linux 自动跳过）、系统安装 LibreOffice Calc（含玲珑商店版，引擎自动探测）。
+
+**验收状态**：模板识别、配置中心、历史读取等 openpyxl 功能已可离线使用；
+完整审核流程（soffice 重算 + 条件格式）须在真实 UOS 环境按
+`unified/docs/TEST_UOS.md` 清单验收后方可正式使用。联合模板制作等
+COM 专属功能暂仅支持 Windows 外壳。
 
 ## 测试
 
 ```sh
-cd Flask/shared && PYTHONPATH=src python -m pytest tests/ -q
+cd unified/core && PYTHONPATH=src python3 -m pytest tests/ -q
 ```
 
 ## 与其他发行线的关系
 
-- `Flask/shared` 是唯一活跃开发的业务核心；改功能只改这一处，两个外壳同时生效。
-- `pywebview2/windows` 是已验证的冻结基线，仅作对照，不再开发新功能。
+- 业务功能一律改 `unified/core`，两个外壳同时生效；归档线见
+  `external/Flask`、`external/pywebview2`（各含归档说明）。

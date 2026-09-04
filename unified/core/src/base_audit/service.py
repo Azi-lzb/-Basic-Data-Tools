@@ -347,6 +347,28 @@ class AuditService:
         """
         if self.config_path is None:
             raise ValueError("按流程执行需要 data/历史审核配置.xlsx")
+        # 管线分派（engines 收口平台判断）：UOS/麒麟走原生管线，Windows 走 COM。
+        from .engines import pipeline_kind
+
+        if pipeline_kind(self.engine_preference) == "native":
+            from .native.flow import run_native_flow
+
+            outcome = run_native_flow(
+                flow_name=flow_name,
+                template_path=template_path,
+                input_dir=input_dir,
+                output_dir=output_dir,
+                history_path=history_path,
+                config_path=self.config_path,
+                external_path=external_path,
+                recursive=recursive,
+                period=period,
+                on_step=on_step,
+                write_flow_logs=write_flow_logs,
+                selected_files=selected_files,
+            )
+            return _NativeFlowResult(outcome)
+
         steps = load_flow_steps(self.config_path, flow_name)
         if not steps:
             raise ValueError(f"执行流程“{flow_name}”不存在，或没有启用的功能")
@@ -1436,3 +1458,20 @@ class AuditService:
             performance_lines=performance_lines,
             copies=copies,
         )
+
+
+class _NativeFlowResult:
+    """native/flow.py 返回值到 web 层的适配：web 只消费 summary_text()。"""
+
+    def __init__(self, outcome: dict) -> None:
+        self._outcome = outcome
+
+    def summary_text(self) -> str:
+        parts = []
+        output = self._outcome.get("output")
+        if output:
+            parts.append("流程输出：{}".format(output))
+        log = self._outcome.get("log")
+        if log:
+            parts.append("运行日志：{}".format(log))
+        return "\n".join(parts) if parts else "流程完成。"

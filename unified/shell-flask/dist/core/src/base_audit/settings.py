@@ -47,6 +47,8 @@ class UserSettings:
     output_pinned: bool = False
     recursive_folders: bool = True
     write_flow_logs: bool = False
+    # 执行主流程前弹出待处理文件清单让用户确认。
+    confirm_before_run: bool = True
     calculation_engine: str = "自动"
     show_custom_features: bool = False
     favorite_input_dirs: list[FavoritePath] = field(default_factory=list)
@@ -95,6 +97,8 @@ class SettingsStore:
             recursive_folders=bool(payload.get("recursive_folders", True)),
             # 运行日志可随时在设置中心开启；默认不额外生成日志工作簿。
             write_flow_logs=bool(payload.get("write_flow_logs", False)),
+            # 执行前确认默认开启：误点主按钮时先看到文件清单，避免直接跑批。
+            confirm_before_run=bool(payload.get("confirm_before_run", True)),
             calculation_engine=(
                 str(payload.get("calculation_engine") or "自动")
                 if str(payload.get("calculation_engine") or "自动") in CALCULATION_ENGINES

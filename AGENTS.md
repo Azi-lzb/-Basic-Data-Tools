@@ -81,10 +81,12 @@
 ```text
 .
 ├─ unified/                  # 活跃发行线：core 共享核心 + 双平台外壳
-│  ├─ core/                  # 唯一业务核心：src/base_audit（含 engines/ 引擎适配层：
-│  │                         #   protocol.py、excel_wps.py、libreoffice*.py）+ frontend/web + tests/
-│  ├─ shell-flask/           # Flask 外壳（本地服务 + 浏览器，面向 UOS/国产化）
-│  └─ shell-pywebview/       # pywebview 外壳（Windows 桌面窗口）
+│  ├─ core/                  # 唯一业务核心：src/base_audit（含 engines/ 引擎适配层与
+│  │                         #   native/ UOS 原生管线）+ frontend/web + tests/
+│  ├─ shell-flask/           # 跨平台 Flask 外壳（Windows + 统信 UOS/麒麟；.bat 与 .sh）
+│  │                         #   打包：打包Flask*.bat（PyInstaller EXE）/ 打包Flask-UOS.sh（源码包）
+│  ├─ shell-pywebview/       # pywebview 外壳（Windows 桌面窗口）
+│  └─ docs/TEST_UOS.md       # UOS 实机验收清单
 ├─ external/Flask/ → 已归档（2026-09-04，归档说明.md 在其目录下）
 │  # 前一代 Flask 线；含确认弹窗/公式批量读性能修复/bridge.api 改名等待移植改进
 ├─ external/pywebview2/ → 已归档（2026-09-04，归档说明.md 在其目录下）
@@ -106,9 +108,9 @@
 
 - 业务功能一律改 `unified/core/`（后端 `src/base_audit`、前端 `frontend/web/index.html`、测试 `tests/`），两个外壳 `unified/shell-flask/`、`unified/shell-pywebview/` 只放平台差异，不得各自复制业务代码。
 - 前后端唯一接口是桥接层：前端调用 `bridge.api.方法名(...)`（`window.bridge`，就绪事件 `bridgeready`）。shell-flask 注入 fetch 代理为 `POST /api/方法名`；shell-pywebview 由 `web_app.launch_web` 注入别名垫片（`bridge = 原生 pywebview`）。改接口先改 core 的 `web_app.py`，外壳不写接口。**活跃代码中不得再出现 `pywebview` 字样**——"pywebview" 只指 `external/pywebview2/` 归档项目。
-- 平台差异（Excel/WPS COM 与 LibreOffice UNO）封装在 `unified/core/src/base_audit/engines/`；业务流程层不得直接判断 COM、UNO 或操作系统。
+- 平台差异收口在两处：`unified/core/src/base_audit/engines/`（引擎列表、pipeline_kind 平台判断）与 `native/`（UOS 原生管线：openpyxl + soffice 重算 + 条件格式 OOXML 求值）。业务流程层不得直接判断 COM、UNO 或操作系统，只问 `pipeline_kind()` 返回 "com" 还是 "native"。Windows 走 excel_com.ExcelSession 会话；UOS 走 native 逐文件编排（源文件 SHA-256 前后校验）。
 - 改动后在 Windows 上运行 unified/core 的 pytest 全绿才可合入；UOS/LibreOffice 专属路径需在真实 UOS 环境验收。
-- `external/Flask/` 的三项改进（执行前确认弹窗、外部公式批量读性能修复、bridge.api 改名）已于 2026-09-04 移植入 unified，归档仅作历史留存。
+- `external/Flask/` 的三项改进（执行前确认弹窗、外部公式批量读性能修复、bridge.api 改名）已于 2026-09-04 移植入 unified，归档仅作历史留存。UOS 版的完整审核流程须按 `unified/docs/TEST_UOS.md` 在真实 UOS 环境验收后方可正式交付；COM 专属功能（组合联合核查表、组合工作表、联合模板制作）在 native 分支明确报"暂仅支持 Windows"。
 
 ## 跨平台统一架构与发布
 

@@ -131,18 +131,41 @@ def _external_sheet_plan(
     definition: object,
     external_workbook: object,
 ) -> ExternalSheetPlan:
-    formulas = []
+    # 模板规则上千条时逐格 COM 取公式是热路径（每格一次跨进程调用，可达数秒）。
+    # 按工作表一次性读取 UsedRange.Formula 二维数组，再用单元格坐标取回规则
+    # 公式；语义与逐格读取一致（只看启用规则的公式）。
+    from .excel_com import _cell_position
+
+    cells_by_sheet: dict[str, set[str]] = {}
     for rule in definition.rules:
         if rule.enabled:
-            formulas.append(
-                template_workbook.Worksheets(rule.sheet_name).Range(rule.formula_cell).Formula
-            )
+            cells_by_sheet.setdefault(rule.sheet_name, set()).add(rule.formula_cell)
+    formulas: list[object] = []
+    for sheet_name, cells in sorted(cells_by_sheet.items()):
+        sheet = template_workbook.Worksheets(sheet_name)
+        used = sheet.UsedRange
+        matrix = used.Formula
+        top, left = int(used.Row), int(used.Column)
+        if not isinstance(matrix, tuple):
+            matrix = ((matrix,),)
+        width = max(len(row) for row in matrix) if matrix else 0
+        for address in sorted(cells):
+            row, column = _cell_position(address)
+            r, c = row - top, column - left
+            if 0 <= r < len(matrix):
+                row_values = matrix[r]
+                if isinstance(row_values, tuple) and 0 <= c < len(row_values):
+                    formulas.append(row_values[c])
+                    continue
+                if not isinstance(row_values, tuple) and c == 0:
+                    formulas.append(row_values)
+                    continue
+            # 单元格在 UsedRange 之外（理论不应发生）：回退单格读取。
+            formulas.append(sheet.Range(address).Formula)
     return make_external_sheet_plan(
         formulas=formulas,
         available_sheets=excel._worksheet_names(external_workbook),
     )
-
-
 def _source_files(
     input_dir: Path,
     selected_files: list[Path] | None = None,
