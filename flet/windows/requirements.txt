@@ -1,0 +1,5 @@
+# Windows Flet 正式版：Excel/WPS COM + openpyxl。
+openpyxl>=3.1,<4
+pywin32>=306
+flet>=0.27,<1
+flet-desktop>=0.27,<1

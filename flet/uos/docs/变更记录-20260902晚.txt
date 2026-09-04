@@ -1,0 +1,75 @@
+基础数据审核工具（统信版）2026-09-02 晚间改动记录
+====================================================
+
+一、桌面快捷启动（uos/ 目录）
+--------------------------------
+- 新增 启动-无终端.sh：供 .desktop 双击启动（无终端窗口），找不到 .venv 时弹提示。
+- 桌面与开始菜单入口改为指向 uos/ ：
+    /home/AZI/Desktop/基础数据审核工具.desktop
+    ~/.local/share/applications/base-audit-uos.desktop
+  两者 Exec 均指向 …/uos/启动-无终端.sh，已 chmod +x 并打 UOS 可信标记。
+- 把嵌套的 uos/uos 提升到 uos/ 顶层；uos/.venv 已建好（克隆自 uos_audit/.venv，
+  含 flet/openpyxl 等，无需联网重装）。系统 python3 缺 ensurepip，故直接
+  `python3 -m venv` 会失败，重建环境用“克隆 .venv + 改 pyvenv.cfg”。
+
+二、条件格式提取 —— 根因与彻底修复（核心）
+--------------------------------------------
+现象：校验规则能提，但“条件格式结果提取”一直为 0。
+
+根因（两层）：
+1) python3-uno 缺失导致整批中止 —— 已解决。
+2) 更深层：LibreOffice 的 UNO 读不到条件格式渲染色。
+   CellBackColor 只反映基础填充，条件格式是动态叠加，UNO 无 API 可取；
+   在 xlsx / LO 重存 / .ods 三种文件上实测均如此（规则在但色恒 -1）。
+   Windows/Excel/WPS 能提是因为 COM 的 DisplayFormat.Interior.Color 是专用 API。
+   因此“用 LO 渲染色”路线在 LibreOffice 下走不通，已废弃。
+
+修复（uos/src/uos_audit/conditional_format.py）：
+- 改为纯 openpyxl OOXML 规则求值：直接读被扫描工作簿自带的条件格式规则，
+  判断触发并取规则 dxf 填充色作为渲染色，不再依赖 LibreOffice/uno。
+- cellIs 各运算符（=、<>、<、>、<=、>=、between）直接求值。
+- expression 公式型新增轻量求值器 evaluate_expression_formula：
+  支持 AND/OR/NOT/ABS/SUM、比较与算术、数字/字符串(含"")、单格与 A1:B2 区域、
+  $ 绝对/相对锁定；以规则范围左上角为锚点按目标格平移相对引用（与 Excel 一致）。
+- dxf 色解析支持 rgb、indexed（COLOR_INDEX，如 indexed=10→红 FFFF0000）、
+  theme(前12主题色 + tint)。无色 dxf 不产出。
+- 多规则同格按 priority 取后应用色、stopIfTrue 停止（近似 Excel）。
+
+规则编号与描述：
+- 规则编号(rule_id) 改为业务约定格式：
+    工作簿名(去日期)｜sheet名｜定位单元格｜校验指标
+  例如：惠州农村商业银行…_B00__在线核查表｜存量单位贷款信息｜C26｜合计_本期余额
+- 描述(detail)：单元格有批注用批注；无批注时还原规则本身：
+    cellIs     -> 条件格式规则：C26>0
+    expression -> 条件格式规则：d35<>d27+d28+d34（去$、小写、紧凑）
+
+支持范围与边界：
+- 被扫描的是源报送文件自带的规则；模板的 expression 规则不会复制进审核副本
+  （copy_formula_ranges 只拷公式区域值、不拷 CF 规则），故条件格式提取不扫模板。
+- colorScale / dataBar / iconSet 需真实渲染器，仅 Windows/Excel/WPS COM 支持；
+  Linux 下不产出。
+
+三、失败后处理语义修正（audit.py / workflow.py）
+--------------------------------------------------
+- 条件格式步骤 UNO/渲染不可用时不再无条件中止整批：新增 conditional_on_failure
+  参数，“失败后处理=跳过”只记录并继续；“停止”才中止。run_flow 按流程配置传入。
+
+四、测试
+----------
+- tests/test_conditional_skip.py：cellIs / expression（变化率带、SUM 行等式、ABS、
+  跨行相对平移、文本等值、indexed 色、描述格式）共 12 用例。
+- 回归：44 项通过（9 项 deselected 是该树 tests 用 formulas 引擎与“仅 LibreOffice
+  引擎”设计的既有冲突，与本次改动无关）。
+
+五、真实验证（2026-09-02/03）
+------------------------------
+- 单位贷款 惠州农商 C26/D26 → #FFC7CE / #FFEB9C（cellIs>0）。
+- 个人贷款 C26 → #00B0F0（expression AND($C$26<>"",$C$26>0)）。
+- 16 个真实报送文件广谱：0 错误、数十条触发（随数据）；代发工资 SUM 行等式、
+  变化率±30%、互联网金融/单位存款/委托贷款/同业等公式型规则均能识别。
+- GUI 输出“本期审核结果”已含多条“总行条件格式触发”，带正确指标与规则编号。
+
+六、提示词文档
+----------------
+- 提示词-条件格式提取-已修复.txt（记录根因结论与实现边界）
+- 提示词-整体完善与快捷打开.txt（收尾/打包/测试清单）

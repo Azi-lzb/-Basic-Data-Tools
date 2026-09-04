@@ -1,0 +1,16 @@
+{
+  "input": "/home/AZI/Desktop/2026-07-31/单位贷款核查表",
+  "templateDir": "/home/AZI/Desktop/2026-07-31/模板文件_命名区域",
+  "template": "/home/AZI/Desktop/2026-07-31/模板文件_命名区域/！10.基础数据-单位贷款202608.xlsx",
+  "templateManual": false,
+  "external": "/home/AZI/Desktop/2026-07-31/外部文件-大集中相关数据.xlsx",
+  "output": "/home/AZI/Desktop/2026-07-31/单位贷款核查表/执行结果",
+  "outputAuto": true,
+  "outputPinned": false,
+  "recursive": true,
+  "writeFlowLogs": false,
+  "confirmBeforeRun": true,
+  "showCustomFeatures": false,
+  "calculationEngine": "LibreOffice Calc",
+  "historyPath": "/home/AZI/Desktop/基础数据审核程序/uos/历史审核说明.xlsx"
+}

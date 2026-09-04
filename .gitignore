@@ -17,6 +17,7 @@ build/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest_*/
 *.egg-info/
 .venv/
 venv/
@@ -27,3 +28,18 @@ Thumbs.db
 .idea/
 .vscode/
 .claude/
+
+# ZCode 会话目录
+.zcode/
+
+# external 归档区：只放行 pywebview2 冻结基线（源码+dist），
+# flutter 工具链(3.3G)/research/archives 不上传
+external/*
+!external/pywebview2/
+
+# 运行时数据：历史审核配置（可能含真实机构历史问题）与流程配置不入库
+历史审核配置.xlsx
+流程配置.json
+
+# 审核测试输出（含真实机构数据的审核副本）
+测试执行结果*/

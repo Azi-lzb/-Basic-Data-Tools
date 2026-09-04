@@ -1,0 +1,15 @@
+{
+  "input": "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\单位贷款校验结果说明",
+  "templateDir": "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\模板文件_命名区域",
+  "template": "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\模板文件_命名区域\\！汇总校验结果及报送说明.xlsx",
+  "templateManual": false,
+  "external": "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\外部文件-大集中相关数据.xlsx",
+  "output": "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\单位贷款校验结果说明\\执行结果",
+  "outputPinned": false,
+  "historyPath": "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\历史审核配置.xlsx",
+  "recursive": true,
+  "writeFlowLogs": false,
+  "confirmBeforeRun": true,
+  "showCustomFeatures": false,
+  "calculationEngine": "Excel/WPS"
+}

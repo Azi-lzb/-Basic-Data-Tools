@@ -1,0 +1,5 @@
+# 统信原生版：Flet 桌面界面 + openpyxl + 系统 LibreOffice Calc。
+# LibreOffice 由目标系统通过 DEB 依赖或安装说明提供，不打入 Python 包。
+openpyxl>=3.1,<4
+flet>=0.27,<1
+flet-desktop>=0.27,<1

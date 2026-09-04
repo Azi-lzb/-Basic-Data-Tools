@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest_*/
+.venv-win-build/
+windows-build*.log
+build/
+dist/

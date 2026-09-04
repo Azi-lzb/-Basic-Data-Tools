@@ -1,0 +1,28 @@
+基础数据审核工具（统信版）依赖清单 — 离线安装
+==============================================
+生成时间: 2026-09-03
+收集源: UOS Desktop 25 Professional (V25)
+适用目标机: 与收集源同版本(UOS V25) 的内网离线机器
+
+主 deb:
+  base-audit-uos_1.1.0_amd64.deb
+主 deb 直接依赖:
+  libgtk-3-0, libreoffice-calc, libreoffice-core
+
+本目录含主 deb 的运行时依赖全部 .deb 共 225 个 + 主 deb = 226 个。
+
+内网离线安装步骤（目标机）:
+  1) 把整个 deb/ 目录（含 deps/）拷到内网机
+  2) cd deps
+  3) sudo dpkg -i *.deb
+     - 若提示缺依赖/顺序问题，再执行一次: sudo dpkg -i *.deb
+  4) 启动: 开始菜单「基础数据审核工具（统信版）」
+     或命令行: /usr/bin/base-audit-uos
+
+若目标机是 V20（不是 V25）:
+  本 deps 按 V25 源收集，不能在 V20 混用。
+  请在能连 V20 软件源的机器上重新执行收集脚本生成 V20 版依赖:
+    ./收集依赖.sh   # 需先在该机器放好 uos 目录与 deb
+
+依赖内容由 apt-get download 从 UOS V25 官方源下载，完整覆盖
+libgtk-3-0 / libreoffice-calc / libreoffice-core 及其传递依赖。

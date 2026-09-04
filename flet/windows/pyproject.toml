@@ -1,0 +1,12 @@
+[project]
+name = "base-audit-flet"
+version = "0.1.0"
+description = "基础数据审核工具 Flet 桌面版"
+requires-python = ">=3.12"
+dependencies = [
+    "openpyxl>=3.1,<4",
+    "flet>=0.27,<1",
+    "flet-desktop>=0.27,<1",
+    # Required by the Excel/WPS COM adapters in the packaged Windows runtime.
+    "pywin32>=306; platform_system == 'Windows'",
+]

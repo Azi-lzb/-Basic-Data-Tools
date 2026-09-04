@@ -5,6 +5,14 @@
 工作台右上角的“📕 使用说明”打开 Word 文档
 `基础数据审核工具使用说明.docx`。本 README 保留项目维护和快速查阅内容。
 
+## 项目结构
+
+- `pywebview2/windows/`：Windows pywebview 项目，也是唯一支持 Win7 的发行链路；其中包含旧界面、Excel/WPS COM 后端、Win7 专用 PyInstaller 配置与测试。
+- `flet/windows/`：Windows Flet 项目，仅使用 Excel COM / WPS COM 与 `openpyxl`；不包含 LibreOffice、formulas 或 IronCalc。
+- `flet/uos/`：统信/UOS Flet 项目，仅使用系统安装的 LibreOffice Calc/UNO 与 `openpyxl`；不包含 Windows COM 或纯 Python 公式引擎。
+- `external/`：Flutter 工具链归档、历史研究资产、旧打包产物和聊天记录，不属于任何正式安装包。
+- `2026-07-31/`：真实数据与模板，只读留存，不作为程序临时目录。
+
 ## 日常使用
 
 1. 双击 `基础数据审核工具.exe`。

@@ -1,0 +1,7 @@
+{
+  "recursive": true,
+  "writeFlowLogs": false,
+  "confirmBeforeRun": true,
+  "showCustomFeatures": false,
+  "calculationEngine": "Excel COM（测试）"
+}

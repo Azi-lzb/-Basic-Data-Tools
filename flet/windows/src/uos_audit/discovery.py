@@ -1,0 +1,411 @@
+from __future__ import annotations
+
+import json
+import re
+import zipfile
+from dataclasses import asdict, dataclass
+from difflib import SequenceMatcher
+from pathlib import Path
+from xml.etree import ElementTree
+
+from .template import normalize_template_name
+
+
+SOURCE_SUFFIXES = {".xlsx", ".xls"}
+PERIOD_SEPARATED_RE = re.compile(
+    r"(?<!\d)(20\d{2})[-._年/](0?[1-9]|1[0-2])(?:月|[-._/](?:0?[1-9]|[12]\d|3[01])日?)?(?!\d)"
+)
+PERIOD_COMPACT_RE = re.compile(
+    r"(?<!\d)(20\d{2})(0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])?(?!\d)"
+)
+
+
+@dataclass(frozen=True)
+class PeriodDetection:
+    period: str
+    source: str
+    conflict: bool = False
+    details: str = ""
+
+
+@dataclass(frozen=True)
+class TemplateProfile:
+    path: str
+    size: int
+    mtime_ns: int
+    report_name: str
+    sheet_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TemplateSuggestion:
+    template_path: Path | None
+    confidence: float
+    matched: bool
+    details: str
+    alternatives: tuple[tuple[str, float], ...] = ()
+
+
+# 目录名包含此标识即不作为输入扫描。用户可在任何目录名中加入
+# “_skip”来排除该目录；“执行结果”保留为旧版兼容的固定排除名。
+SKIP_DIRECTORY_MARKER = "_skip"
+GENERATED_OUTPUT_FOLDERS = {"执行结果"}
+
+
+def is_skipped_input_path(parts: tuple[str, ...]) -> bool:
+    """Whether a relative source path is excluded by the directory rule."""
+    return any(
+        part.casefold() in GENERATED_OUTPUT_FOLDERS
+        or SKIP_DIRECTORY_MARKER in part.casefold()
+        for part in parts
+    )
+
+
+def source_workbooks(input_dir: Path, *, recursive: bool = False) -> list[Path]:
+    """List original source workbooks, optionally including institution subfolders."""
+    if not input_dir.is_dir():
+        return []
+    iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
+    return sorted(
+        path
+        for path in iterator
+        if path.suffix.lower() in SOURCE_SUFFIXES
+        and not path.name.startswith("~$")
+        and "_审核版" not in path.stem
+        and not is_skipped_input_path(path.relative_to(input_dir).parts[:-1])
+    )
+
+
+# 机构偶尔以 doc/docx/pdf 等非 xlsx 附件单独上传说明文件；这类文件不是审核源，
+# 但需要在前端“机构说明文件”卡片提醒用户其存在。下面这些扩展名视为系统垃圾，
+# 不进入提醒清单。
+NON_XLSX_SKIPPED_SUFFIXES = {"", ".tmp", ".lnk", ".ini", ".db", ".log", ".json", ".cache"}
+
+
+def explanation_files(input_dir: Path, *, recursive: bool = False) -> list[Path]:
+    """List non-xlsx attachment/explanation files from the source tree.
+
+    Institutions sometimes upload their explanation as a .doc/.docx/.pdf
+    instead of an .xlsx workbook.  These are surfaced in a separate workbench
+    card so the user is reminded they exist, without treating them as audit
+    sources.  Generated output folders are skipped, matching ``source_workbooks``.
+    """
+    if not input_dir.is_dir():
+        return []
+    iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
+    return sorted(
+        path
+        for path in iterator
+        if path.is_file()
+        and path.suffix.lower() not in SOURCE_SUFFIXES
+        and path.suffix.lower() not in NON_XLSX_SKIPPED_SUFFIXES
+        and not path.name.startswith(("~$", "."))
+        and not is_skipped_input_path(path.relative_to(input_dir).parts[:-1])
+    )
+
+
+def _periods_in_text(value: str) -> set[str]:
+    periods = {
+        f"{match.group(1)}-{int(match.group(2)):02d}"
+        for match in PERIOD_SEPARATED_RE.finditer(value)
+    }
+    periods.update(
+        f"{match.group(1)}-{int(match.group(2)):02d}"
+        for match in PERIOD_COMPACT_RE.finditer(value)
+    )
+    return periods
+
+
+def detect_period(input_dir: Path, *, recursive: bool = False) -> PeriodDetection:
+    files = source_workbooks(input_dir, recursive=recursive)
+    filename_periods: set[str] = set()
+    for path in files:
+        filename_periods.update(_periods_in_text(path.stem))
+    if len(filename_periods) == 1:
+        period = next(iter(filename_periods))
+        return PeriodDetection(period, "源文件名", details=f"从源文件名识别为 {period}")
+    if len(filename_periods) > 1:
+        values = "、".join(sorted(filename_periods))
+        return PeriodDetection(
+            "", "源文件名", True, f"源文件中识别出多个数据期：{values}"
+        )
+
+    # Only fall back to folder names when filenames contain no period at all.
+    for folder in (input_dir, *input_dir.parents):
+        periods = _periods_in_text(folder.name)
+        if len(periods) == 1:
+            period = next(iter(periods))
+            return PeriodDetection(period, "文件夹名称", details=f"从文件夹名称识别为 {period}")
+        if len(periods) > 1:
+            values = "、".join(sorted(periods))
+            return PeriodDetection(
+                "", "文件夹名称", True, f"文件夹名称中识别出多个数据期：{values}"
+            )
+    return PeriodDetection("", "", details="未识别到数据期，请手动填写")
+
+
+def read_xlsx_sheet_names(path: Path) -> tuple[str, ...]:
+    if path.suffix.casefold() == ".xls":
+        try:
+            import xlrd
+            return tuple(xlrd.open_workbook(str(path), on_demand=True).sheet_names())
+        except Exception:
+            return ()
+    try:
+        with zipfile.ZipFile(path) as archive:
+            xml = archive.read("xl/workbook.xml")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return ()
+    root = ElementTree.fromstring(xml)
+    # ElementTree's ``{*}tag`` wildcard is not supported by Python 3.7,
+    # which is retained for the Win7 package.  Compare the local XML tag name
+    # explicitly so Win7 and current Python versions read the same sheet list.
+    return tuple(
+        node.attrib["name"]
+        for node in root.iter()
+        if node.tag.rsplit("}", 1)[-1] == "sheet" and node.attrib.get("name")
+    )
+
+
+class TemplateCatalog:
+    def __init__(self, template_dir: Path, index_path: Path) -> None:
+        self.template_dir = template_dir
+        self.index_path = index_path
+
+    def profiles(self, *, force: bool = False) -> list[TemplateProfile]:
+        cached = {} if force else self._load_index()
+        profiles: list[TemplateProfile] = []
+        for path in sorted(self.template_dir.glob("*.xlsx")):
+            if path.name.startswith("~$"):
+                continue
+            stat = path.stat()
+            key = str(path.resolve())
+            item = cached.get(key)
+            if (
+                item
+                and item.get("size") == stat.st_size
+                and item.get("mtime_ns") == stat.st_mtime_ns
+            ):
+                profile = TemplateProfile(
+                    path=key,
+                    size=stat.st_size,
+                    mtime_ns=stat.st_mtime_ns,
+                    report_name=str(item.get("report_name") or ""),
+                    sheet_names=tuple(item.get("sheet_names") or ()),
+                )
+            else:
+                profile = TemplateProfile(
+                    path=key,
+                    size=stat.st_size,
+                    mtime_ns=stat.st_mtime_ns,
+                    report_name=normalize_template_name(path.stem),
+                    sheet_names=read_xlsx_sheet_names(path),
+                )
+            profiles.append(profile)
+        self._write_index(profiles)
+        return profiles
+
+    def _load_index(self) -> dict[str, dict[str, object]]:
+        try:
+            content = json.loads(self.index_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return {}
+        if not isinstance(content, dict) or content.get("template_dir") != str(
+            self.template_dir.resolve()
+        ):
+            return {}
+        items = content.get("templates", [])
+        return {
+            str(item.get("path")): item
+            for item in items
+            if isinstance(item, dict) and item.get("path")
+        }
+
+    def _write_index(self, profiles: list[TemplateProfile]) -> None:
+        self.index_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": 2,
+            "template_dir": str(self.template_dir.resolve()),
+            "templates": [asdict(item) for item in profiles],
+        }
+        temporary = self.index_path.with_suffix(self.index_path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temporary.replace(self.index_path)
+
+
+def _compact(value: str) -> str:
+    value = PERIOD_SEPARATED_RE.sub("", value)
+    value = PERIOD_COMPACT_RE.sub("", value)
+    return "".join(character.lower() for character in value if character.isalnum())
+
+
+def _filename_score(report_name: str, source_stem: str) -> float:
+    target = _compact(report_name)
+    if not target:
+        return 0.0
+    raw_parts = [part for part in re.split(r"[_\s]+", source_stem) if part]
+    candidates = [source_stem, *raw_parts]
+    candidates.extend("_".join(raw_parts[start:]) for start in range(len(raw_parts)))
+    best = 0.0
+    for value in candidates:
+        candidate = _compact(value)
+        if not candidate:
+            continue
+        if target in candidate or candidate in target:
+            shorter = min(len(target), len(candidate))
+            longer = max(len(target), len(candidate))
+            if shorter >= 4:
+                best = max(best, 0.92 + 0.08 * shorter / longer)
+                continue
+        best = max(best, SequenceMatcher(None, target, candidate).ratio())
+    return min(best, 1.0)
+
+
+def _sheet_score(template_sheets: tuple[str, ...], source_sheets: tuple[str, ...]) -> float:
+    """Score template candidates by worksheet-set compatibility only.
+
+    Source sheets must be covered by the template.  Templates may additionally
+    contain helper sheets such as ``集中系统数据`` and ``参照表``; those reduce
+    the score slightly but do not prevent a combined workbook from matching.
+    """
+    expected = {name for name in template_sheets if name != "审核规则"}
+    actual = set(source_sheets)
+    if not expected or not actual:
+        return 0.0
+    common = len(expected & actual)
+    source_coverage = common / len(actual)
+    template_precision = common / len(expected)
+    return 0.8 * source_coverage + 0.2 * template_precision
+
+
+def _candidate_text(
+    scores: list[tuple[float, TemplateProfile, float, float]],
+) -> str:
+    """Short, actionable candidate explanation for the workbench log."""
+    return "；".join(
+        f"{Path(profile.path).name}（工作表集合 {sheet_score:.0%}）"
+        for _, profile, name_score, sheet_score in scores[:3]
+    )
+
+
+def recommend_template(
+    template_dir: Path,
+    input_dir: Path,
+    index_path: Path,
+    *,
+    force_index: bool = False,
+    recursive: bool = False,
+) -> TemplateSuggestion:
+    files = source_workbooks(input_dir, recursive=recursive)
+    if not files:
+        return TemplateSuggestion(None, 0.0, False, "源数据目录中没有可识别的 .xlsx 文件")
+    profiles = TemplateCatalog(template_dir, index_path).profiles(force=force_index)
+    if not profiles:
+        return TemplateSuggestion(None, 0.0, False, "模板文件目录中没有正式模板")
+
+    # Determine the report type from every confidently recognisable source
+    # workbook.  A source directory commonly also contains a previously
+    # generated "校验结果及报送说明" workbook; it is not a raw report and must
+    # not make a whole directory fail just because it sorts before the actual
+    # institution files.
+    per_file_choices: dict[str, list[float]] = {}
+    profile_by_path = {item.path: item for item in profiles}
+    for source in files:
+        source_sheets = read_xlsx_sheet_names(source)
+        ranked = sorted(
+            (
+                (
+                    _sheet_score(item.sheet_names, source_sheets),
+                    item,
+                )
+                for item in profiles
+            ),
+            key=lambda item: item[0], reverse=True,
+        )
+        if ranked and ranked[0][0] >= 0.90:
+            if len(ranked) == 1 or ranked[0][0] - ranked[1][0] >= 0.04:
+                per_file_choices.setdefault(ranked[0][1].path, []).append(ranked[0][0])
+    if len(per_file_choices) > 1:
+        return TemplateSuggestion(
+            None,
+            0.0,
+            False,
+            "源数据目录可能包含多种报表，请按报表类型分目录后再审核",
+        )
+
+    # When one report type has a clear consensus, use it even if unrelated
+    # workbooks are present.  This is intentionally decided before the legacy
+    # first-file fallback below.
+    if per_file_choices:
+        selected_path, selected_scores = next(iter(per_file_choices.items()))
+        selected = profile_by_path[selected_path]
+        confidence = sum(selected_scores) / len(selected_scores)
+        alternatives = tuple(
+            (Path(path).name, round(sum(values) / len(values), 3))
+            for path, values in sorted(
+                per_file_choices.items(), key=lambda item: sum(item[1]) / len(item[1]), reverse=True
+            )
+        )
+        details = (
+            f"自动匹配：{Path(selected.path).name}（{len(selected_scores)} 个源文件的工作表集合"
+            f"匹配率 {confidence:.0%}；已忽略未能识别的非报送工作簿）"
+        )
+        return TemplateSuggestion(Path(selected.path), confidence, True, details, alternatives)
+
+    source_sheets = read_xlsx_sheet_names(files[0])
+    scores: list[tuple[float, TemplateProfile, float, float]] = []
+    for profile in profiles:
+        name_score = 0.0
+        sheets_score = _sheet_score(profile.sheet_names, source_sheets)
+        total = sheets_score
+        scores.append((total, profile, name_score, sheets_score))
+    scores.sort(key=lambda item: item[0], reverse=True)
+    top_total, top, name_score, sheets_score = scores[0]
+    runner_up = scores[1][0] if len(scores) > 1 else 0.0
+    alternatives = tuple(
+        (Path(profile.path).name, round(total, 3))
+        for total, profile, _, _ in scores[:3]
+    )
+    structure_decisive = (
+        sheets_score >= 0.95
+        and (len(scores) == 1 or sheets_score - scores[1][3] >= 0.20)
+    )
+    unique_enough = top_total - runner_up >= 0.05 or structure_decisive
+    matched = top_total >= 0.90 and unique_enough
+    if matched:
+        details = (
+            f"自动匹配：{Path(top.path).name}（工作表集合匹配率 {top_total:.0%}，"
+            f"取最高匹配率候选；前三候选：{_candidate_text(scores)}）"
+        )
+        return TemplateSuggestion(
+            Path(top.path), top_total, True, details, alternatives
+        )
+    if top_total >= 0.80 and not unique_enough:
+        details = "有多个相近模板，已停止自动选择，请手动确认。候选：" + _candidate_text(scores)
+    else:
+        details = "未找到可信度足够的模板，请手动选择"
+    return TemplateSuggestion(None, top_total, False, details, alternatives)
+
+
+def classify_source_files(
+    template_dir: Path, input_dir: Path, index_path: Path, *, recursive: bool = False
+) -> list[dict[str, str]]:
+    """Return a lightweight per-file template suggestion for the workbench."""
+    files = source_workbooks(input_dir, recursive=recursive)
+    profiles = TemplateCatalog(template_dir, index_path).profiles() if template_dir.is_dir() else []
+    rows: list[dict[str, str]] = []
+    for path in files:
+        ranked: list[tuple[float, TemplateProfile]] = []
+        source_sheets = read_xlsx_sheet_names(path)
+        for profile in profiles:
+            score = _sheet_score(profile.sheet_names, source_sheets)
+            ranked.append((score, profile))
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        if ranked and ranked[0][0] >= 0.90:
+            template_name = Path(ranked[0][1].path).name
+        else:
+            template_name = "未识别"
+        rows.append({"path": str(path), "name": path.name, "template": template_name})
+    return rows
