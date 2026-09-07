@@ -196,6 +196,45 @@ class FlaskApi(WebApi):
         ).start()
         return True
 
+    # 报表采集系统页：tkinter 弹窗选择跨期比较路径（只选不执行）。
+    def choose_period_compare(self, kind: str) -> str:
+        if self.state["busy"] or kind not in {"pcCurDir", "pcPreDir", "pcCentral", "pcConfig", "pcOutput"}:
+            return ""
+        titles = {
+            "pcCurDir": "选择当期（本期）数据目录",
+            "pcPreDir": "选择上期数据目录",
+            "pcCentral": "选择大集中数据文件",
+            "pcConfig": "选择跨期比较配置.xlsx",
+            "pcOutput": "选择输出目录",
+        }
+        current = self.state.get(kind) or self.state.get("input") or str(self.project_root)
+        if kind in {"pcCentral", "pcConfig"}:
+            value = _tk_dialog(
+                lambda root, fd: fd.askopenfilename(
+                    parent=root, title=titles[kind],
+                    initialdir=str(Path(current).parent) if Path(current).is_file() else current,
+                    filetypes=[("Excel 文件", "*.xlsx *.xlsm *.xls")],
+                )
+            ) or ""
+        else:
+            value = _tk_dialog(
+                lambda root, fd: fd.askdirectory(parent=root, title=titles[kind], initialdir=current)
+            ) or ""
+        if value:
+            self.state[kind] = str(Path(value).resolve())
+            if kind == "pcCurDir" and self.state.get("pcOutputAuto", True):
+                self.state["pcOutput"] = str(Path(value).resolve() / "执行结果")
+            elif kind == "pcOutput":
+                self.state["pcOutputAuto"] = False
+            label = {
+                "pcCurDir": "当期目录", "pcPreDir": "上期目录", "pcCentral": "大集中数据",
+                "pcConfig": "跨期比较配置", "pcOutput": "输出目录",
+            }[kind]
+            self._log(f"跨期比较：{label}已选择")
+            self._save_settings()
+        self._refresh_period_pairs()
+        return self.state.get(kind, "")
+
     # 浏览器没有自绘标题栏；顶栏按钮在 Flask 版中无操作。
     def win_minimize(self) -> None:
         return None

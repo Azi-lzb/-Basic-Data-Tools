@@ -46,6 +46,15 @@ def valid_engine_values() -> set[str]:
     return {item["value"] for item in available_engines()}
 
 
+def pipeline_kind(engine_preference: str = ENGINE_AUTO) -> str:
+    """当前环境下应使用的审核管线类型，业务层只问结果不判系统。
+
+    - ``"com"``：Windows Excel/WPS 会话（excel_com.ExcelSession 全功能门面）；
+    - ``"native"``：openpyxl + soffice 重算的原生管线（native 包）。
+    """
+    return "com" if sys.platform == "win32" else "native"
+
+
 def probe_engines() -> list[dict[str, str]]:
     """逐项探测引擎真实可用性；返回 value/available/detail 供诊断界面使用。"""
     status: list[dict[str, str]] = []
@@ -66,5 +75,6 @@ __all__ = [
     "available_engines",
     "engine_hint",
     "valid_engine_values",
+    "pipeline_kind",
     "probe_engines",
 ]

@@ -43,6 +43,40 @@ def make_xlsx(path: Path, *sheet_names: str) -> None:
 
 
 class DiscoveryTests(unittest.TestCase):
+    def test_recursive_depth_levels(self) -> None:
+        """0 层=仅根目录；1 层=下一级文件夹；负数/True=最深处。"""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "root.xlsx").touch()
+            level1 = root / "机构甲"
+            level1.mkdir()
+            (level1 / "a.xlsx").touch()
+            level2 = level1 / "2026-06"
+            level2.mkdir()
+            (level2 / "b.xlsx").touch()
+            assert len(source_workbooks(root, recursive=0)) == 1
+            assert len(source_workbooks(root, recursive=1)) == 2
+            assert len(source_workbooks(root, recursive=2)) == 3
+            assert len(source_workbooks(root, recursive=-1)) == 3
+            assert len(source_workbooks(root, recursive=True)) == 3
+
+    def test_extra_files_join_pending_list(self) -> None:
+        """手动追加的文件（源数据目录之外）进入待处理清单并可被勾选。"""
+        from base_audit.service import _source_files
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "in_list.xlsx").touch()
+            outside = Path(folder) / "追加.xlsx"
+            outside.touch()
+            files = _source_files(root, extra_files=[outside])
+            names = [path.name for path in files]
+            assert "in_list.xlsx" in names
+            assert "追加.xlsx" in names
+            # 勾选追加文件时不在 allowed 集合会被拒绝——放行后应成功
+            picked = _source_files(root, selected_files=[outside], extra_files=[outside])
+            assert [path.name for path in picked] == ["追加.xlsx"]
+
+
     def test_period_is_read_from_source_filenames(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

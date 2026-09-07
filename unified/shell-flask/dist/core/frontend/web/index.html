@@ -40,20 +40,6 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:none}
 input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ---------- 顶部栏 ---------- */
-.topbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px 12px 22px;background:linear-gradient(120deg,var(--header-top),var(--header-bottom));color:#fff;box-shadow:0 1px 0 rgba(255,255,255,.06) inset;-webkit-app-region:drag;user-select:none}
-.topbar button,.topbar .win-btn{-webkit-app-region:no-drag}
-.brand{display:flex;align-items:center;gap:12px;min-width:0}
-.brand-title{font-size:15px;font-weight:700;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.brand-icon{position:relative;width:38px;height:38px;flex:none;display:grid;place-items:center}
-.brand-icon::after{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 9px);z-index:60;white-space:nowrap;background:#0c1626;color:#e8f0fb;font-size:12px;line-height:1.5;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.16);box-shadow:0 6px 18px rgba(0,0,0,.28);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,visibility .15s}
-.brand-icon:hover::after{opacity:1;visibility:visible}
-.brand-icon img{width:36px;height:36px;object-fit:contain;display:block}
-.topbar-right{display:flex;align-items:center;gap:10px;-webkit-app-region:no-drag}
-.win-controls{display:flex;align-items:center;margin-left:2px}
-.win-btn{width:34px;height:34px;display:grid;place-items:center;background:transparent;border:none;border-radius:8px;color:#cbd5e1;cursor:pointer;margin-top:3px}
-.win-btn:hover{background:rgba(255,255,255,.12);color:#fff}
-.win-close:hover{background:#e81123;color:#fff}
-.win-btn svg{width:15px;height:15px}
 
 /* ---------- 按钮 ---------- */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);padding:9px 14px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s,border-color .15s,color .15s,box-shadow .15s,transform .05s;user-select:none;white-space:nowrap;position:relative}
@@ -78,8 +64,25 @@ input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offse
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ---------- 主布局：上排两栏，下排整行文件列表 ---------- */
-.layout{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:16px;padding:18px 22px;align-items:stretch}
+.layout{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);gap:16px;padding:18px 22px;align-items:stretch}
+.file-extra-tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:10.5px;vertical-align:1px}
+.file-remove{flex:none;width:20px;height:20px;display:grid;place-items:center;border-radius:6px;color:var(--text-3);cursor:pointer;font-size:12px;margin-right:2px}
+.file-remove:hover{background:var(--danger-soft);color:var(--danger)}
 /* 待审核文件 + 机构说明文件：同一行并排，左 2/3、右 1/3 */
+/* 路径卡片：六个路径框 3 列两行 */
+.paths-card{grid-column:1/-1}
+.paths-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 18px}
+.paths-grid .field{margin-bottom:0}
+/* 自定义功能卡片：与执行按钮卡片同宽，位于其下、待处理文件上方 */
+.card.custom-card{grid-column:1/-1;flex-direction:row;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px}
+.card.custom-card .field-head{margin-bottom:0}
+.card.custom-card .custom-list{display:flex;flex-wrap:wrap;gap:10px;margin:0}
+/* 卡片内自定义功能项改为横排小按钮 */
+.card.custom-card .custom-item{width:auto;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;padding:8px 14px}
+.card.custom-card .custom-name{font-size:12.5px}
+.card.custom-card .custom-remark{font-size:10.5px}
+/* 主界面执行按钮行（独立卡片）：源数据目录与待审核文件之间 */
+.card.actionbar{grid-column:1/-1;flex-direction:row;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px}
 .files-wrap{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;min-height:0}
 /* 无机构说明文件时：只显示待审核文件，占满整行 */
 .files-wrap.only-files{grid-template-columns:minmax(0,1fr)}
@@ -117,7 +120,6 @@ select:disabled{opacity:.6;cursor:not-allowed}
 .engine-detail.warn{color:var(--warn)}
 
 /* ---------- 上排卡片 + 待审核文件（整行） ---------- */
-.panel-left{overflow:hidden}
 .tips{margin-top:6px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
 .tips-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .tips h2{margin:0;font-size:12px;font-weight:600;color:var(--text-2)}
@@ -166,11 +168,7 @@ select:disabled{opacity:.6;cursor:not-allowed}
 .explanation-empty{grid-column:1/-1;display:flex;align-items:center;justify-content:center;min-height:70px;color:var(--text-3);font-size:12.5px;margin:0}
 
 /* ---------- 右侧：四个字段 ---------- */
-.panel-right{overflow:auto}
-.panel-right .field{margin-bottom:15px}
-.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px;align-items:start}
 /* ---------- 右侧：显示在主界面的自定义流程 ---------- */
-.custom-field{margin-top:2px}
 .custom-list{display:flex;flex-direction:column;gap:8px}
 .custom-item{display:flex;align-items:baseline;justify-content:space-between;gap:10px;text-align:left;width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);cursor:pointer;font:inherit;transition:background .15s,border-color .15s,color .15s}
 .custom-item:hover{background:var(--accent-soft);border-color:var(--accent-ring)}
@@ -203,11 +201,30 @@ select:disabled{opacity:.6;cursor:not-allowed}
 .reset-menu .item:hover{background:var(--accent-soft);color:var(--accent)}
 .reset-menu .item:focus-visible{outline:2px solid var(--accent-ring);outline-offset:-2px}
 .menu-hint{display:block;margin:2px 2px 4px;padding:7px 9px 4px;border-top:1px solid var(--border);color:var(--text-3);font-size:11px;line-height:1.55;max-width:260px;white-space:normal}
-/* ---------- 设置中心 ---------- */
-.settings-mask{display:none;position:fixed;inset:0;z-index:55;background:rgba(12,22,38,.45);align-items:center;justify-content:center}
-.settings-dialog{width:980px;max-width:calc(100vw - 40px);height:84vh;max-height:760px;min-height:420px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);display:flex;flex-direction:column;overflow:hidden}
-.settings-header{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 18px;border-bottom:1px solid var(--border)}
-.settings-title{margin:0;font-size:15px;font-weight:700;color:var(--text)}
+/* ---------- 主界面左侧导航（逐笔统计 / 报表采集 / 设置中心） ---------- */
+.app-shell{flex:1;min-height:0;display:flex;align-items:stretch}
+.sidenav{flex:none;width:172px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;gap:4px;padding:14px 10px}
+.sidenav-item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:11px 13px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--text-2);font:inherit;font-size:13.5px;cursor:pointer;transition:background .15s,color .15s}
+.sidenav-item svg{flex:none;width:17px;height:17px}
+.sidenav-item:hover{background:var(--bg);color:var(--text)}
+.sidenav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600;border-color:#d5e5ff}
+.sidenav-item:focus-visible{outline:2px solid var(--accent-ring);outline-offset:-2px}
+.sidenav-foot{margin-top:auto;padding:8px 10px;font-size:11px;color:var(--text-3);line-height:1.6}
+.app-page{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
+.page{flex:1;min-height:0;display:none;flex-direction:column}
+.page.active{display:flex}
+/* 报表采集系统页 */
+.collect-page{flex:1;min-height:0;overflow:auto;padding:22px 26px;display:flex;flex-direction:column;gap:16px}
+.collect-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.collect-card{min-width:0}
+.collect-card h2{margin:0 0 6px;font-size:15px}
+.collect-card p{margin:4px 0;color:var(--text-2);font-size:13px;line-height:1.7}
+.collect-tip{margin:8px 0 0;font-size:11.5px;color:var(--text-3);line-height:1.6}
+@media(max-width:980px){.collect-grid{grid-template-columns:1fr}}
+/* ---------- 设置中心（内嵌页，不再弹窗） ---------- */
+.settings-page{flex:1;min-height:0;padding:16px 18px;display:flex;flex-direction:column}
+/* 设置中心内嵌页：占据导航右侧整页，不再弹窗 */
+.settings-dialog{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);display:flex;flex-direction:column;overflow:hidden}
 .settings-close{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--text-3);cursor:pointer;font-size:15px;line-height:1;transition:background .15s,color .15s,border-color .15s}
 .settings-close:hover{background:var(--surface-2);border-color:var(--border);color:var(--text)}
 .settings-body{flex:1;min-height:0;display:flex}
@@ -218,7 +235,10 @@ select:disabled{opacity:.6;cursor:not-allowed}
 .settings-tab-btn:focus-visible{outline:2px solid var(--accent-ring);outline-offset:-2px}
 /* 进阶页签彩蛋：默认与常规设置、操作指引并列但隐藏，连点“设置中心”标题 5 次解锁（localStorage 记忆） */
 .settings-nav.advanced-locked .settings-advanced-item{display:none}
-#settingsTitle{cursor:default;user-select:none}
+/* 彩蛋锁定时隐藏逐笔统计系统的隐藏按钮 */
+body.egg-locked .egg-btn{display:none}
+#toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%) translateY(8px);z-index:90;background:#0c1626;color:#e8f0fb;font-size:12.5px;line-height:1.5;padding:10px 16px;border-radius:10px;border:1px solid rgba(255,255,255,.16);box-shadow:0 6px 18px rgba(0,0,0,.28);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s,visibility .18s,transform .18s}
+#toast.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
 .settings-content{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
 .settings-errors{flex:none;margin:12px 16px 0;padding:10px 12px;border:1px solid #f2c6c3;border-radius:10px;background:var(--danger-soft);color:var(--danger);font-size:12px;line-height:1.6}
 .settings-errors[hidden]{display:none}
@@ -430,8 +450,9 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
 .status.error .status-dot{background:var(--danger)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 #statusText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.log-head{display:flex;align-items:center;justify-content:space-between;margin:12px 0 7px}
+.log-head{display:flex;align-items:center;gap:10px;margin:12px 0 7px}
 .log-head>span{font-size:12.5px;font-weight:600;color:var(--text-2)}
+.log-head .status{margin-left:auto;padding:3px 10px;font-size:11.5px;gap:6px}
 .log{box-sizing:border-box;width:100%;height:164px;resize:none;overflow:auto;background:#0b1120;color:#cbd5e1;border:1px solid #1f2b41;border-radius:12px;padding:12px 14px;font:12px/1.7 Consolas,"Cascadia Code","Microsoft YaHei",monospace;user-select:text;-webkit-user-select:text}
 /* ---------- 进度条：运行记录 与 黑框 之间，按任务事件衰减推进 ---------- */
 .progress{display:flex;align-items:center;gap:10px;margin:0 0 8px}
@@ -448,10 +469,9 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
   body{overflow:auto}
   .layout{grid-template-columns:1fr;grid-template-rows:auto auto auto;overflow:visible}
   .files-wrap{grid-template-columns:1fr}
-  .field-grid{grid-template-columns:1fr}
+  .paths-grid{grid-template-columns:1fr}
   .file-list{grid-template-columns:1fr;min-height:180px;max-height:260px}
   .status{max-width:100%;margin-left:0;flex-basis:100%;justify-content:flex-start}
-  .topbar{padding:12px 16px}
   .layout{padding:14px 16px}
   .console{padding:12px 16px 14px}
   .settings-dialog{width:calc(100vw - 24px);height:92vh;max-height:none;min-height:0}
@@ -464,58 +484,41 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
 </head>
 <body>
 
-<header class="topbar app-drag-region" id="titlebar">
-  <div class="brand">
-    <div class="brand-icon" data-tip="Supported by HZPBC"><img src="data:image/png;base64,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" alt=""></div>
-    <div>
-      <div class="brand-title">基础数据审核工具</div>
-    </div>
-  </div>
-  <div class="topbar-right">
-    <button class="btn ghost" id="settingsBtn" onclick="openSettings()" title="设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>设置</button>
-    <div class="win-controls">
-      <button class="win-btn" onclick="winMin()" title="最小化" aria-label="最小化"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-      <button class="win-btn" id="winMaxBtn" onclick="winMax()" title="最大化" aria-label="最大化"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
-      <button class="win-btn win-close" onclick="winClose()" title="关闭" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
-    </div>
-  </div>
-</header>
 
+
+<div class="app-shell">
+<nav class="sidenav" id="sidenav">
+  <button type="button" class="sidenav-item active" data-page="audit" onclick="switchPage('audit')" title="逐笔统计系统：基础数据审核">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    逐笔统计系统
+  </button>
+  <button type="button" class="sidenav-item" data-page="collect" onclick="switchPage('collect')" title="报表采集系统：季报跨期比较与大集中核对">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="16" x2="8" y2="12"/><line x1="13" y1="16" x2="13" y2="8"/><line x1="18" y1="16" x2="18" y2="13"/></svg>
+    报表采集系统
+  </button>
+  <button type="button" class="sidenav-item" data-page="settings" onclick="switchPage('settings')" title="设置中心">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1.51 1 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    设置中心
+  </button>
+  <div class="sidenav-foot">基础数据审核工具<br>统一核心版</div>
+</nav>
+
+<div class="app-page">
+<section class="page active" id="page-audit">
 <main class="layout">
 
-  <!-- 左侧：源数据目录 -->
-  <section class="card panel-left">
-    <div class="field">
-      <div class="field-head">
-        <label for="input">源数据目录</label>
-      </div>
-      <div class="input-group">
-        <div class="path-name empty" id="inputName">未选择</div>
-        <button class="btn" onclick="pick('input','folder')" title="选择源数据目录">选择</button>
-      </div>
-    </div>
-    <div class="tips">
-      <div class="tips-head">
-        <h2>使用提示</h2>
-        <div class="tips-actions">
-          <button class="about-btn" onclick="openAbout()" title="关于与免责声明">关于</button>
-          <button class="guide-btn" onclick="openGuide()" title="打开使用说明" aria-label="打开使用说明">📕</button>
+  <!-- 路径卡片：六个路径框合并为一张卡（3 列两行） -->
+  <section class="card paths-card">
+    <div class="paths-grid">
+      <div class="field">
+        <div class="field-head">
+          <label for="input">源数据目录</label>
+        </div>
+        <div class="input-group">
+          <div class="path-name empty" id="inputName">未选择</div>
+          <button class="btn" onclick="pick('input','folder')" title="选择源数据目录">选择</button>
         </div>
       </div>
-      <ol>
-        <li>先选择源数据目录；机构文件分散在子文件夹时，在右上角“设置”勾选“递归子文件夹”。</li>
-        <li>审核核查表：核对自动识别的模板，必要时手动选择模板和外部文件，再点“汇总核查表校验”。</li>
-        <li>汇总说明文件：选择校验结果及报送说明目录和对应汇总模板，勾选递归后点“汇总校验结果说明”。</li>
-        <li>需要跨表核查：先点“组合联合核查表”，再以合并出的文件制作联合模板；原始文件不会被修改。</li>
-        <li>输出目录默认跟随源数据目录；点书钉后固定。历史说明请直接维护程序根目录的“历史审核说明.xlsx”。</li>
-      </ol>
-      <p class="tips-merge" id="mergeHint">组合联合核查表仅使用“源数据目录、输出目录”，模板、外部文件等控件已弱化，无需选择模板；“递归子文件夹”可在右上角“设置”中调整。输出目录默认是“源数据目录\执行结果”，可按书钉固定。</p>
-    </div>
-  </section>
-
-  <!-- 右侧：模板 / 匹配 / 输出 / 外部 -->
-  <section class="card panel-right">
-    <div class="field-grid">
       <div class="field" id="field-templateDir">
         <div class="field-head">
           <label for="templateDir">模板文件目录</label>
@@ -533,6 +536,15 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
         <div class="input-group">
           <div class="path-name empty" id="outputName">未选择</div>
           <button class="btn" onclick="pick('output','folder')" title="修改输出目录">修改</button>
+        </div>
+      </div>
+      <div class="field" id="field-historyConfig">
+        <div class="field-head">
+          <label for="historyConfig">历史审核配置</label>
+        </div>
+        <div class="input-group">
+          <div class="path-name empty" id="historyConfigName">未选择</div>
+          <button class="btn" onclick="pickHistoryConfig()" title="选择历史审核配置.xlsx">选择</button>
         </div>
       </div>
       <div class="field" id="field-template">
@@ -554,39 +566,38 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
           <button class="btn" onclick="pick('external','file')" title="选择外部文件">选择</button>
         </div>
       </div>
-      <div class="field" id="field-historyConfig">
-        <div class="field-head">
-          <label for="historyConfig">历史审核配置</label>
-        </div>
-        <div class="input-group">
-          <div class="path-name empty" id="historyConfigName">未选择</div>
-          <button class="btn" onclick="pickHistoryConfig()" title="选择历史审核配置.xlsx">选择</button>
-        </div>
-      </div>
-    </div>
-    <div class="field custom-field" style="display:none">
-      <div class="field-head">
-        <label>自定义功能</label>
-      </div>
-      <div id="customList" class="custom-list"></div>
-      <p class="custom-hint">显示的自定义流程由“设置中心 → 流程编排”维护；是否显示整块按钮区由“设置 → 常规设置 → 显示自定义功能”控制。</p>
     </div>
   </section>
+
+  <div class="card custom-card" id="customCard" style="display:none">
+    <div class="field-head">
+      <label>自定义功能</label>
+    </div>
+    <div id="customList" class="custom-list"></div>
+  </div>
+
+  <div class="card actionbar">
+    <button class="btn primary" data-action="audit" onclick="startFlow('汇总核查表校验','audit')" title="内置模板体检与文件匹配，复制公式、重算并生成审核副本与问题汇总">汇总核查表校验</button>
+    <button class="btn" data-action="summary" onclick="startFlow('汇总校验结果说明','summary')" title="按“执行流程”的“汇总校验结果说明”流程执行区域汇总">汇总校验结果说明</button>
+    <button class="btn egg-btn" data-action="merge" onclick="startMerge()" title="按“组合联合核查表”流程把同一机构分散在多个报送工作簿里的数据合并为一本">组合联合核查表</button>
+    <button class="btn egg-btn" data-action="templateMerge" onclick="createTemplateMerge()" title="把多个模板的独有工作表合并成一本“联合模板”，低频的模板制作动作">制作联合模板</button>
+  </div>
 
   <!-- 待审核文件（左 2/3）+ 机构说明文件（右 1/3）：同一行并排 -->
   <div class="files-wrap">
   <div class="file-panel">
     <div class="file-head">
-      <span class="file-title">待审核文件 <span class="count-pill" id="fileCount"></span></span>
+      <span class="file-title">待处理文件 <span class="count-pill" id="fileCount"></span></span>
       <span class="file-actions">
         <button class="btn tiny" onclick="selectAll(true)">全选</button>
         <button class="btn tiny" onclick="selectAll(false)">取消</button>
-        <button class="btn tiny" onclick="recognize()" title="重新扫描源数据目录，刷新待审核文件清单">刷新</button>
+        <button class="btn tiny" onclick="recognize()" title="重新扫描源数据目录，刷新待处理文件清单">刷新</button>
+        <button class="btn tiny" onclick="appendExtraFiles()" title="在源数据目录之外，手动追加待处理文件（跨会话保留）">追加文件</button>
       </span>
     </div>
     <div class="mixed" id="mixed"></div>
     <div class="file-list" id="fileList">
-      <div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5 4 8l-1 9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2l-1-9-1.5-3z"/></svg></div><p>选择源数据目录后，自动列出待审核文件</p></div>
+      <div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5 4 8l-1 9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2l-1-9-1.5-3z"/></svg></div><p>选择源数据目录后，自动列出待处理文件</p></div>
     </div>
   </div>
 
@@ -599,13 +610,58 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
   </div><!-- /files-wrap -->
 
 </main>
+</section><!-- /page-audit -->
 
-<div class="settings-mask" id="settingsMask" onclick="closeSettings()">
-  <div class="settings-dialog" onclick="event.stopPropagation()">
-    <div class="settings-header">
-      <span class="settings-title" id="settingsTitle" onclick="settingsTitleClick()" title="设置中心">设置中心</span>
-      <button type="button" class="settings-close" onclick="closeSettings()" title="关闭" aria-label="关闭">✕</button>
+<section class="page" id="page-collect">
+  <div class="collect-page">
+    <div class="collect-grid">
+      <div class="card collect-card">
+        <div class="field-head"><label>本期待处理</label></div>
+        <div class="input-group">
+          <div class="path-name empty" id="pcCurName">未选择</div>
+          <button class="btn" onclick="pickPc('pcCurDir')" title="选择当期（本期）报送数据目录，支持逐机构逐表、按报表划分、按机构划分三种导出方式">选择</button>
+        </div>
+        <p class="collect-tip">当期报送文件目录；三种系统导出方式自动识别。</p>
+      </div>
+      <div class="card collect-card">
+        <div class="field-head"><label>上期待处理</label></div>
+        <div class="input-group">
+          <div class="path-name empty" id="pcPreName">未选择</div>
+          <button class="btn" onclick="pickPc('pcPreDir')" title="选择上期报送数据目录；两期按机构名称和指标编号自动配对">选择</button>
+        </div>
+        <p class="collect-tip">上期报送文件目录；与当期自动配对比较。</p>
+      </div>
     </div>
+    <div class="collect-grid">
+      <div class="card collect-card">
+        <div class="field-head"><label>集中系统数据（可选）</label></div>
+        <div class="input-group">
+          <div class="path-name empty" id="pcCentralName">未选择</div>
+          <button class="btn" onclick="pickPc('pcCentral')" title="选择含“集中系统数据”与“参照表”的大集中工作簿；不需要核对时可不选">选择</button>
+        </div>
+        <p class="collect-tip">大集中数据工作簿；不选则跳过与大集中核对。</p>
+      </div>
+      <div class="card collect-card">
+        <div class="field-head"><label>执行</label></div>
+        <div class="actions" style="margin-top:2px">
+          <button class="btn primary" data-action="periodCompare" onclick="runPeriodCompare()" title="本期与上期逐指标比较，选了集中系统数据时一并核对">跨期比较</button>
+          <button class="btn" onclick="openLastPeriodOutput()" title="打开当前输出目录">打开输出目录</button>
+        </div>
+        <p class="collect-tip">输出到逐笔统计系统设置的“输出目录”（默认当期目录\执行结果）；原始文件不会被修改。</p>
+      </div>
+    </div>
+    <div class="card collect-card">
+      <h2>说明</h2>
+      <p>· 结果生成“跨期比较_时间戳.xlsx”，含“跨期比较”和“大集中比较”两张表；指标、机构与警戒区间在程序目录的“跨期比较配置.xlsx”中维护（已内置完整配置）。</p>
+      <p>· “跨期比较”表：当期数/上期数（万元）、变动绝对值、环比变动、警戒区间备注、特殊指标提示、复杂校验勾稽关系。</p>
+      <p>· “大集中比较”表：与大集中（集中系统）数据逐指标核对，差异超过 100 元的行在“是否说明”列标记。</p>
+    </div>
+  </div>
+</section><!-- /page-collect -->
+
+<section class="page" id="page-settings">
+  <div class="settings-page">
+  <div class="settings-dialog">
     <div class="settings-body">
       <nav class="settings-nav" id="settingsNav">
         <button type="button" class="settings-tab-btn active" data-tab="general" onclick="setSettingsTab('general')">常规设置</button>
@@ -622,11 +678,14 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
     </div>
     <div class="settings-footer">
       <span class="settings-dirty" id="settingsDirty" hidden>有未保存的更改</span>
-      <button class="btn" id="settingsCancelBtn" onclick="closeSettings()">取消</button>
+      <button class="btn" id="settingsCancelBtn" onclick="closeSettings()">放弃更改</button>
       <button class="btn primary" id="settingsSaveBtn" onclick="saveSettings()">保存自定义设置</button>
     </div>
   </div>
-</div>
+  </div>
+</section><!-- /page-settings -->
+</div><!-- /app-page -->
+</div><!-- /app-shell -->
 
 <div class="settings-name-mask" id="settingsNameMask" onclick="cancelFlowName()">
   <div class="settings-name-card" onclick="event.stopPropagation()">
@@ -668,16 +727,12 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
 </div>
 
 <footer class="console">
-  <div class="actions">
-    <button class="btn primary" data-action="audit" onclick="startFlow('汇总核查表校验','audit')" title="内置模板体检与文件匹配，复制公式、重算并生成审核副本与问题汇总">汇总核查表校验</button>
-    <button class="btn" data-action="summary" onclick="startFlow('汇总校验结果说明','summary')" title="按“执行流程”的“汇总校验结果说明”流程执行区域汇总">汇总校验结果说明</button>
-    <button class="btn" data-action="merge" onclick="startMerge()" title="按“组合联合核查表”流程把同一机构分散在多个报送工作簿里的数据合并为一本">组合联合核查表</button>
-    <button class="btn" data-action="templateMerge" onclick="createTemplateMerge()" title="把多个模板的独有工作表合并成一本“联合模板”，低频的模板制作动作">制作联合模板</button>
-    <div class="status" id="status"><span class="status-dot"></span><span id="statusText">正在加载…</span></div>
-  </div>
   <div class="log-head">
     <span>运行记录</span>
+    <div class="status" id="status"><span class="status-dot"></span><span id="statusText">正在加载…</span></div>
     <button class="btn tiny" id="copyLog" onclick="copyLog()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span id="copyLabel">复制全部</span></button>
+    <button class="btn tiny" onclick="openAbout()" title="关于与免责声明">关于</button>
+    <button class="btn tiny" onclick="openGuide()" title="打开使用说明" aria-label="打开使用说明">使用说明</button>
   </div>
   <div class="progress" id="progress" hidden>
     <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
@@ -761,15 +816,6 @@ async function pickHistoryConfig(){
   await bridge.api.choose_history_config();
   await refresh();
 }
-function winMin(){if(window.bridge)bridge.api.win_minimize()}
-function winMax(){
-  if(!window.bridge)return;
-  const btn=document.getElementById('winMaxBtn'),isMax=btn&&btn.dataset.max==='1';
-  bridge.api.win_maximize(!!isMax);
-  if(btn){btn.dataset.max=isMax?'':'1';btn.title=isMax?'最大化':'还原'}
-}
-function winClose(){if(window.bridge)bridge.api.win_close()}
-document.getElementById('titlebar').addEventListener('dblclick',e=>{if(!e.target.closest('button'))winMax()});
 async function recognize(){await sync();await bridge.api.recognize();await refresh()}
 /* ============ 设置中心 ============ */
 const CFG={data:null,draft:{customModules:[],customFlows:[],flowDisplay:{},combineSheetsPlans:[],activeCombineSheetsPlanId:''},emptyFlows:[],dirty:false,
@@ -919,14 +965,33 @@ function showSettingsPaneLoading(){
   const pane=document.getElementById('settingsPane');
   pane.innerHTML='<div class="settings-loading"><span class="spin"></span><p>正在加载设置…</p></div>';
 }
-async function openSettings(){
-  if(state&&state.busy)return;
-  document.getElementById('settingsMask').style.display='flex';
-  document.getElementById('settingsNameMask').style.display='none';
+/* ---------- 主界面页面切换（逐笔统计 / 报表采集 / 设置中心） ---------- */
+let currentPage='audit';
+function switchPage(page){
+  if(page==='audit')registerEggClick();
+  if(page===currentPage){return}
+  if(currentPage==='settings'&&CFG.dirty){
+    askDiscardSettings(page);
+    return;
+  }
+  applySwitchPage(page);
+}
+function applySwitchPage(page){
+  currentPage=page;
+  document.querySelectorAll('.sidenav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+page));
+  if(page==='settings'&&!CFG.data){loadSettingsData()}
+  if(page==='audit'){refresh()}
+}
+function openLastPeriodOutput(){
+  const dir=(state&&state.output)?state.output:'';
+  if(!dir){alert('尚未选择输出目录');return}
+  bridge.api.open_path(dir);
+}
+async function loadSettingsData(){
   CFG.data=null;CFG.dirty=false;CFG.saving=false;
   CFG.selModule=-1;CFG.selFlow=null;CFG.selStep=-1;CFG.emptyFlows=[];CFG.origCombinePlanId='';
   CFG.tab='general';
-  const dirtyEl=document.getElementById('settingsDirty');if(dirtyEl)dirtyEl.hidden=true;
   hideSettingsFeedback();
   showSettingsPaneLoading();
   setSettingsTab('general');
@@ -939,43 +1004,70 @@ async function openSettings(){
   }catch(e){
     CFG.data=null;
     const pane=document.getElementById('settingsPane');
-    pane.innerHTML='<div class="settings-load-error"><p>加载设置数据失败：'+(e&&e.message?esc(e.message):'未知错误')+'</p><button class="btn" onclick="closeSettings(true)">关闭</button></div>';
+    pane.innerHTML='<div class="settings-load-error"><p>加载设置数据失败：'+(e&&e.message?esc(e.message):'未知错误')+'</p><button class="btn" onclick="applySwitchPage(\'audit\')">返回逐笔统计</button></div>';
   }
 }
 function closeSettings(force){
-  if(!force&&CFG.dirty){askDiscardSettings();return}
-  document.getElementById('settingsMask').style.display='none';
+  if(!force&&CFG.dirty){askDiscardSettings('audit');return}
   document.getElementById('settingsNameMask').style.display='none';
   CFG.data=null;CFG.draft={customModules:[],customFlows:[],flowDisplay:{},combineSheetsPlans:[],activeCombineSheetsPlanId:''};CFG.emptyFlows=[];
   CFG.dirty=false;CFG.saving=false;CFG.selModule=-1;CFG.selFlow=null;CFG.selStep=-1;CFG.origCombinePlanId='';
   hideSettingsFeedback();
   const dirtyEl=document.getElementById('settingsDirty');if(dirtyEl)dirtyEl.hidden=true;
+  applySwitchPage('audit');
 }
-function askDiscardSettings(){
-  pendingConfirm={type:'discardSettings'};
+function askDiscardSettings(target){
+  pendingConfirm={type:'discardSettings',target};
   document.getElementById('confirmTitle').textContent='放弃未保存的更改';
   document.getElementById('confirmOk').textContent='放弃更改';
-  document.getElementById('confirmMsg').textContent='设置有未保存的更改，放弃后将不生效。确定要关闭吗？';
+  document.getElementById('confirmMsg').textContent='设置有未保存的更改，放弃后将不生效。确定要离开设置中心吗？';
   document.getElementById('confirmMask').style.display='flex';
 }
 const ADVANCED_TABS=['moduleCatalog','modules','flows'];
 function isAdvancedTab(tab){return ADVANCED_TABS.indexOf(tab)>=0}
-/* 进阶页签：默认隐藏的彩蛋页签，与常规设置、操作指引并列；在“设置中心”标题上 2 秒内连点 5 次解锁/再加 5 次锁定。 */
+/* ---- 彩蛋（统一入口：导航栏 1 秒内连点 5 次） ----
+   一次切换同时控制：设置中心的进阶页签、逐笔统计系统的“组合联合核查表/制作联合模板”按钮。
+   localStorage 记忆。 */
+function eggUnlocked(){
+  return localStorage.getItem('uiEggUnlocked')==='1';
+}
+function applyEggState(){
+  document.body.classList.toggle('egg-locked',!eggUnlocked());
+  syncAdvancedNav();
+}
+let eggClickTimes=[];
+function registerEggClick(){
+  const now=Date.now();
+  eggClickTimes=eggClickTimes.filter(t=>now-t<1000);
+  eggClickTimes.push(now);
+  if(eggClickTimes.length<5)return;
+  eggClickTimes=[];
+  const unlocked=!eggUnlocked();
+  localStorage.setItem('uiEggUnlocked',unlocked?'1':'0');
+  applyEggState();
+  showToast(unlocked?'已解锁隐藏功能（进阶设置、组合联合核查表、制作联合模板）':'已恢复默认界面');
+}
 function syncAdvancedNav(){
   const nav=document.getElementById('settingsNav');
-  const locked=!advancedUnlocked()&&!isAdvancedTab(CFG.tab);
+  const locked=!eggUnlocked()&&!isAdvancedTab(CFG.tab);
   if(nav)nav.classList.toggle('advanced-locked',locked);
 }
-function advancedUnlocked(){return localStorage.getItem('settingsAdvancedUnlocked')==='1'}
-let advClickTimes=[];
-function settingsTitleClick(){
-  const now=Date.now();
-  advClickTimes=advClickTimes.filter(t=>now-t<2000);
-  advClickTimes.push(now);
-  if(advClickTimes.length<5)return;
-  advClickTimes=[];
-  localStorage.setItem('settingsAdvancedUnlocked',advancedUnlocked()?'0':'1');
-  syncAdvancedNav();
+/* 导航栏空白处点击同样计入彩蛋（不与栏目切换冲突） */
+document.getElementById('sidenav').addEventListener('click',e=>{
+  if(e.target===e.currentTarget||e.target.classList.contains('sidenav-foot'))registerEggClick();
+});
+/* 轻提示 */
+function showToast(text){
+  let t=document.getElementById('toast');
+  if(!t){
+    t=document.createElement('div');
+    t.id='toast';
+    document.body.appendChild(t);
+  }
+  t.textContent=text;
+  t.classList.add('show');
+  clearTimeout(showToast._timer);
+  showToast._timer=setTimeout(()=>t.classList.remove('show'),2200);
 }
 function setSettingsTab(tab){
   CFG.tab=tab;
@@ -1024,10 +1116,12 @@ function renderGeneral(){
     +'</div>'
     +'<div class="general-group">'
     +'<div class="general-group-title">待处理文件</div>'
-    +'<label class="setting-row" title="勾选后，源数据目录下的子文件夹中的 Excel 文件也会纳入待处理清单">'
-    +'<input type="checkbox" id="setRecursive" onchange="setRecursive(this.checked)">'
-    +'<span><span class="setting-name">递归扫描子文件夹</span>'
-    +'<span class="setting-desc">勾选后，源数据目录下的子文件夹中的 Excel 文件也会纳入待处理清单。汇总核查表校验通常不需要开启；机构说明文件分散在子文件夹时，汇总校验结果说明通常需要开启。</span></span>'
+    +'<label class="setting-row" title="递归扫描子文件夹的深度：0 层=仅根目录；1 层=包含下一级文件夹；最深处=所有子文件夹">'
+    +'<select id="setRecursiveDepth" onchange="setRecursiveDepth(this.value)">'
+    +'<option value="-1">最深处（默认）</option><option value="0">仅根目录（0 层）</option><option value="1">1 层</option><option value="2">2 层</option><option value="3">3 层</option><option value="4">4 层</option>'
+    +'</select>'
+    +'<span><span class="setting-name">递归扫描深度</span>'
+    +'<span class="setting-desc">扫描源数据目录子文件夹的深度。0 层=仅根目录；1 层=包含下一级文件夹；以此类推。默认递归到最深处。</span></span>'
     +'</label>'
     +'<label class="setting-row" title="勾选后，每次执行流程生成“流程名_运行日志_时间戳.xlsx”；关闭后不生成该 Excel 日志，但界面运行记录仍保留">'
     +'<input type="checkbox" id="setWriteFlowLogs" onchange="setWriteFlowLogs(this.checked)">'
@@ -1066,8 +1160,13 @@ function renderGeneral(){
 }
 function syncGeneralControls(){
   const s=state||{};
-  const rec=document.getElementById('setRecursive');
-  if(rec){rec.checked=!!s.recursive;rec.disabled=!!s.busy;const r=rec.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy)}
+  const depthSel=document.getElementById('setRecursiveDepth');
+  if(depthSel){
+    depthSel.value=String((s.recursiveDepth===undefined||s.recursiveDepth===null)?-1:s.recursiveDepth);
+    if(depthSel.selectedIndex<0)depthSel.value='-1';
+    depthSel.disabled=!!s.busy;
+    const r=depthSel.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy);
+  }
   const lg=document.getElementById('setWriteFlowLogs');
   if(lg){lg.checked=!!s.writeFlowLogs;lg.disabled=!!s.busy;const r=lg.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy)}
   const cb=document.getElementById('setConfirmBeforeRun');
@@ -1078,12 +1177,26 @@ function syncGeneralControls(){
   document.querySelectorAll('input[name=calcEngine]').forEach(r=>{r.checked=(r.value===engine);r.disabled=!!s.busy});
   document.querySelectorAll('input[name=logMode]').forEach(r=>{r.checked=((r.value==='全量')===!!logFull);r.disabled=!!s.busy});
 }
-async function setRecursive(checked){await bridge.api.update({recursive:checked});await refresh()}
+async function appendExtraFiles(){
+  if(state&&state.busy)return;
+  try{ await bridge.api.append_extra_files(); }catch(e){ alert('追加文件失败：'+((e&&e.message)?e.message:String(e))); }
+  await refresh();
+}
+async function removeExtraFile(path){
+  if(state&&state.busy)return;
+  try{ await bridge.api.remove_extra_file(path); }catch(e){ alert('移除失败：'+((e&&e.message)?e.message:String(e))); }
+  await refresh();
+}
+async function setRecursiveDepth(value){
+  const depth=parseInt(value,10);
+  await bridge.api.update({recursiveDepth:isNaN(depth)?-1:depth});
+  await refresh();
+}
 async function setWriteFlowLogs(checked){await bridge.api.update({writeFlowLogs:checked})}
 async function setConfirmBeforeRun(checked){await bridge.api.update({confirmBeforeRun:checked})}
 async function setShowCustom(checked){
   await bridge.api.update({showCustomFeatures:checked});
-  const cf=document.querySelector('.custom-field');
+  const cf=document.getElementById('customCard');
   if(cf)cf.style.display=checked?'block':'none';
   refreshCustomButtons();
 }
@@ -1566,7 +1679,7 @@ async function loadCustom(){customFeatures=await bridge.api.get_custom_features(
 function refreshCustomButtons(){loadCustom()}
 function renderCustom(features){
   const box=document.getElementById('customList');
-  if(!features.length){box.innerHTML='<p class="custom-empty">暂无显示在界面的自定义流程，可在“设置中心 → 流程编排”中勾选“显示在主界面”</p>';return}
+  if(!features.length){box.innerHTML='';return}
   box.innerHTML=features.map(f=>{
     const tip=f.remark?esc(f.remark):esc(f.name);
     return '<button type="button" class="custom-item" onclick="askRun(\''+esc(f.id)+'\')" title="'+tip+'">'
@@ -1587,7 +1700,8 @@ function confirmRun(ok){
   else if(c.type==='reset'){doResetConfig();}
   else if(c.type==='resetEditorPart'){doResetEditorPart(c.part);}
   else if(c.type==='templateMerge'){doCreateTemplateMerge();}
-  else if(c.type==='discardSettings'){closeSettings(true);}
+  else if(c.type==='periodCompare'){doCreatePeriodCompare();}
+  else if(c.type==='discardSettings'){closeSettings(true);applySwitchPage(c.target||'audit');}
   else if(c.type==='delFlow'){doDeleteFlow(c.name);}
   else{runCustom(c.id);}
 }
@@ -1689,7 +1803,7 @@ function setMergeMode(on,combine){
   if(on){
     hint.textContent=combine
       ?'组合工作表仅使用“源数据目录、输出目录”；它不读取模板、外部文件或数据期。递归子文件夹可在“设置”中调整。输出目录默认是“源数据目录\\执行结果”，可按书钉固定。'
-      :'组合联合核查表仅使用“源数据目录、输出目录”，模板、外部文件等控件已弱化，无需选择模板；“递归子文件夹”可在右上角“设置”中调整。输出目录默认是“源数据目录\\执行结果”，可按书钉固定。';
+      :'组合联合核查表仅使用“源数据目录、输出目录”，模板、外部文件等控件已弱化，无需选择模板；“递归子文件夹”可在“设置中心 → 常规设置”中调整。输出目录默认是“源数据目录\\执行结果”，可按书钉固定。';
     hint.classList.add('show');
   }else{
     hint.classList.remove('show');
@@ -1715,13 +1829,56 @@ async function doCreateTemplateMerge(){
   }
   await refresh();
 }
-/* 只允许顶栏（app-drag-region）拖动窗口；其余区域保留文字选取等原生行为。
-   宿主窗口的 easy_drag 会把整窗注册为拖拽区，这里在捕获阶段拦截非拖拽区的 mousedown，
-   运行日志等处才能正常拖选复制。stopPropagation 不影响默认行为（选取/点击/聚焦）。 */
-document.addEventListener('mousedown',e=>{
-  if(e.target&&e.target.closest&&e.target.closest('.app-drag-region'))return;
-  e.stopPropagation();
-},true);
+const PC_FIELDS = [
+  ["pcCurDir", "pcCurName", "当期数据目录"],
+  ["pcPreDir", "pcPreName", "上期数据目录"],
+  ["pcCentral", "pcCentralName", "集中系统数据"],
+];
+function renderCollect(state){
+  for(const [key, nameId] of PC_FIELDS){
+    const el=document.getElementById(nameId);
+    if(!el)continue;
+    const v=state[key]||"";
+    el.textContent=v?v.split(/[\/]/).pop():'未选择';
+    el.classList.toggle('empty',!v);
+    el.title=v;
+  }
+}
+async function pickPc(key){
+  if(state&&state.busy)return;
+  try{
+    await bridge.api.choose_period_compare(key);
+  }catch(e){
+    alert('选择失败：'+((e&&e.message)?e.message:String(e)));
+  }
+  await refresh();
+}
+function runPeriodCompare(){
+  const missing=[];
+  if(!(state&&state.pcCurDir))missing.push('本期待处理目录');
+  if(!(state&&state.pcPreDir))missing.push('上期待处理目录');
+  if(missing.length){
+    alert('请先选择：'+missing.join('、'));
+    return;
+  }
+  pendingConfirm={type:'periodCompare'};
+  document.getElementById('confirmTitle').textContent='跨期比较';
+  document.getElementById('confirmOk').textContent='开始比较';
+  const central=state.pcCentral?'已选择，将一并与大集中核对':'未选择，将跳过大集中核对';
+  document.getElementById('confirmMsg').textContent='将比较当期与上期报送数据（逐机构、逐指标），'+central+'。\n\n'
+    +'结果输出到“'+(state.output||'当期目录\\执行结果')+'”。原始报送文件不会被修改。\n\n'
+    +'请确认后再开始，比较期间请勿操作本页面。';
+  document.getElementById('confirmMask').style.display='flex';
+}
+async function doCreatePeriodCompare(){
+  try{
+    await bridge.api.start_period_compare();
+  }catch(e){
+    const msg=(e&&e.message)?e.message:String(e);
+    alert('跨期比较失败：'+msg);
+  }
+  await refresh();
+}
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   const nm=document.getElementById('settingsNameMask');
@@ -1769,20 +1926,22 @@ function setLogMode(full){logFull=!!full;try{localStorage.setItem('logFull',logF
 function renderFiles(s){
   const list=document.getElementById('fileList'),files=s.sourceFiles||[];
   const selected=new Set(s.selectedFiles||[]);
+  const extraSet=new Set(s.extraFiles||[]);
   const count=document.getElementById('fileCount');
   if(files.length){count.style.display='inline-flex';count.textContent='已选 '+selected.size+' / '+files.length}
   else{count.style.display='none';count.textContent=''}
   const mixed=document.getElementById('mixed'),types=s.mixedTemplates||[];
   if(types.length>1){mixed.style.display='block';mixed.innerHTML='<b>发现 '+types.length+' 类报表：</b>'+esc(types.join('、'))+'。一次审核只应保留同一类型文件，请取消勾选其他类型。'}
   else mixed.style.display='none';
-  if(!files.length){list.innerHTML='<div class="empty"><div class="empty-icon">'+ICON.inbox+'</div><p>选择源数据目录后，自动列出待审核文件</p></div>';return}
+  if(!files.length){list.innerHTML='<div class="empty"><div class="empty-icon">'+ICON.inbox+'</div><p>选择源数据目录后，自动列出待处理文件</p></div>';return}
   list.innerHTML=files.map(f=>{
-    const isSel=selected.has(f.path),matched=f.template!=='未识别';
+    const isSel=selected.has(f.path),matched=f.template!=='未识别',isExtra=extraSet.has(f.path);
     return '<label class="file-row'+(isSel?' checked':'')+'" title="'+esc(f.path)+'">'
       +'<input class="file-check" type="checkbox" value="'+esc(f.path)+'"'+(isSel?' checked':'')+' onchange="sendSelection()">'
       +'<span class="file-doc">'+ICON.file+'</span>'
-      +'<span class="file-main"><span class="file-name">'+esc(f.name)+'</span>'
+      +'<span class="file-main"><span class="file-name">'+esc(f.name)+(isExtra?' <span class="file-extra-tag">追加</span>':'')+'</span>'
       +'<span class="file-meta">'+(matched?esc(f.template):'未匹配到模板')+'</span></span>'
+      +(isExtra?'<span class="file-remove" title="移除该追加文件" onclick="event.preventDefault();removeExtraFile(this.dataset.path)" data-path="'+esc(f.path)+'">✕</span>':'')
       +'<span class="file-tag'+(matched?'':' warn')+'">'+(matched?'已匹配':'未识别')+'</span>'
       +'</label>';
   }).join('');
@@ -1861,7 +2020,7 @@ async function refresh(){
   else if(/失败|异常|错误/.test(s.status))statusEl.classList.add('error');
   const st=document.getElementById('statusText');st.textContent=s.status;st.title=s.status;
   syncGeneralControls();
-  const cfEl=document.querySelector('.custom-field');
+  const cfEl=document.getElementById('customCard');
   if(cfEl)cfEl.style.display=!!s.showCustomFeatures?'block':'none';
   const pinEl=document.getElementById('outputPin');
   if(pinEl){
@@ -1875,6 +2034,7 @@ async function refresh(){
   applyProgress(s);
   renderFiles(s);
   renderExplanation(s);
+  renderCollect(s);
   document.querySelectorAll('button').forEach(b=>{if(b.id!=='copyLog'&&b.id!=='settingsSaveBtn')b.disabled=s.busy});
   updateSaveBtn();
   document.querySelectorAll('[data-action]').forEach(b=>{
@@ -1884,7 +2044,8 @@ async function refresh(){
   });
   setMergeMode(!!s.busy && lastAction==='merge', false);
 }
-window.addEventListener('bridgeready',()=>{refresh();loadCustom()});
+window.addEventListener('bridgeready',()=>{applyEggState();refresh();loadCustom()});
+applyEggState();
 document.getElementById('explanationList').addEventListener('click',e=>{
   const row=e.target&&e.target.closest('.explanation-row');
   if(row&&row.dataset.path)openPath(row.dataset.path);

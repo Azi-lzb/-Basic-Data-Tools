@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 MAX_RECENT_PATHS = 10
-CALCULATION_ENGINES = ("自动", "Microsoft Excel", "WPS 表格")
+CALCULATION_ENGINES = ("自动", "Microsoft Excel", "WPS 表格", "LibreOffice Calc")
 
 
 def hide_application_data_directory(path: Path) -> None:
@@ -46,6 +46,10 @@ class UserSettings:
     history_config: str = ""
     output_pinned: bool = False
     recursive_folders: bool = True
+    # 递归深度：-1=最深处（默认）；0=仅根目录；N=最多进入 N 层子目录。
+    recursive_depth: int = -1
+    # 手动追加进待处理清单的文件（在源数据目录之外），跨会话保留。
+    extra_files: list[str] = field(default_factory=list)
     write_flow_logs: bool = False
     # 执行主流程前弹出待处理文件清单让用户确认。
     confirm_before_run: bool = True
@@ -95,6 +99,9 @@ class SettingsStore:
             output_pinned=bool(payload.get("output_pinned", legacy_pinned)),
             # 说明报送文件通常按机构放在子目录，默认保持递归发现。
             recursive_folders=bool(payload.get("recursive_folders", True)),
+            # 旧设置只有布尔递归开关；迁移：true→最深处，false→仅根目录。
+            recursive_depth=int(payload.get("recursive_depth", -1 if bool(payload.get("recursive_folders", True)) else 0)),
+            extra_files=[str(item) for item in payload.get("extra_files", []) if isinstance(item, str) and item.strip()],
             # 运行日志可随时在设置中心开启；默认不额外生成日志工作簿。
             write_flow_logs=bool(payload.get("write_flow_logs", False)),
             # 执行前确认默认开启：误点主按钮时先看到文件清单，避免直接跑批。

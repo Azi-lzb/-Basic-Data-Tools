@@ -171,9 +171,19 @@ def _source_files(
     input_dir: Path,
     selected_files: list[Path] | None = None,
     *,
-    recursive: bool = False,
+    recursive: "bool | int" = False,
+    extra_files: list[Path] | None = None,
 ) -> list[Path]:
-    all_files = source_workbooks(input_dir, recursive=recursive)
+    """源目录扫描结果 + 用户手动追加的文件，共同构成待处理清单。"""
+    all_files = list(source_workbooks(input_dir, recursive=recursive))
+    extra = [
+        Path(path)
+        for path in (extra_files or [])
+        if Path(path).is_file()
+        and Path(path).resolve() not in {path.resolve() for path in all_files}
+    ]
+    all_files.extend(extra)
+    all_files.sort(key=lambda path: path.name)
     if selected_files is None:
         return all_files
     allowed = {path.resolve() for path in all_files}
@@ -375,6 +385,7 @@ class AuditService:
         history_path: Path,
         selected_files: list[Path] | None = None,
         external_path: Path | None = None,
+        extra_files: list[Path] | None = None,
         recursive: bool = True,
         on_step: Optional[Callable[[str], None]] = None,
         strict: bool = True,
@@ -581,7 +592,7 @@ class AuditService:
                     audit = self.run(
                         template_path=template_path, input_dir=input_dir, output_dir=output_dir,
                         period=period, history_path=history_path, selected_files=selected_files,
-                        external_path=external_path, flow_name=flow_name, recursive=recursive,
+                        external_path=external_path, extra_files=extra_files, flow_name=flow_name, recursive=recursive,
                         on_step=on_step, feature_log=feature_log, strict=strict,
                         effective_sources=effective_sources,
                     )
@@ -606,7 +617,7 @@ class AuditService:
                 result = self.run(
                     template_path=template_path, input_dir=input_dir, output_dir=output_dir,
                     period=period, history_path=history_path, selected_files=selected_files,
-                    external_path=external_path, flow_name=flow_name, recursive=recursive,
+                    external_path=external_path, extra_files=extra_files, flow_name=flow_name, recursive=recursive,
                     on_step=on_step, feature_log=feature_log, strict=strict,
                     effective_sources=effective_sources,
                 )
@@ -641,6 +652,7 @@ class AuditService:
         output_dir: Path,
         selected_files: list[Path] | None = None,
         external_path: Path | None = None,
+        extra_files: list[Path] | None = None,
         recursive: bool = False,
         summary_feature_names: tuple[str, ...] | None = None,
         write_report: bool = True,
@@ -677,7 +689,9 @@ class AuditService:
             raise FileNotFoundError(f"源数据目录不存在：{input_dir}")
         if external_path is not None and not external_path.is_file():
             raise FileNotFoundError(f"外部文件不存在：{external_path}")
-        source_files = _source_files(input_dir, selected_files, recursive=recursive)
+        source_files = _source_files(
+            input_dir, selected_files, recursive=recursive, extra_files=extra_files
+        )
         if not source_files:
             raise ValueError("源数据目录中没有可检查的 .xlsx 文件")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -855,6 +869,7 @@ class AuditService:
         history_path: Path,
         selected_files: list[Path] | None = None,
         external_path: Path | None = None,
+        extra_files: list[Path] | None = None,
         flow_name: str | None = None,
         flow_instances: list[object] | None = None,
         recursive: bool = False,
@@ -901,7 +916,9 @@ class AuditService:
         if flow_name and not flow_steps:
             raise ValueError(f"执行流程“{flow_name}”不存在，或没有启用的功能")
 
-        source_files = _source_files(input_dir, selected_files, recursive=recursive)
+        source_files = _source_files(
+            input_dir, selected_files, recursive=recursive, extra_files=extra_files
+        )
         if not source_files:
             raise ValueError("源数据目录中没有可审核的 .xlsx 文件")
 

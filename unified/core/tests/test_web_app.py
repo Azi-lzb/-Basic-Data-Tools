@@ -80,6 +80,36 @@ class WebAppCompatibilityTests(unittest.TestCase):
         api.update({"input": "C:/报送目录", "outputPinned": False})
         self.assertEqual(api.state["output"], str(Path("C:/报送目录") / "执行结果"))
 
+    def test_period_compare_paths_and_output_are_persisted_separately(self) -> None:
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            current = root / "本期"
+            previous = root / "上期"
+            output = root / "跨期结果"
+            current.mkdir()
+            previous.mkdir()
+            central = root / "集中系统.xlsx"
+            central.touch()
+            window = _Window(str(current))
+            webview = SimpleNamespace(FOLDER_DIALOG=20, OPEN_DIALOG=10, windows=[window])
+            with patch.dict(sys.modules, {"webview": webview}):
+                api = WebApi(root)
+                api.choose_period_compare("pcCurDir")
+                self.assertEqual(api.state["pcOutput"], str(current / "执行结果"))
+                window.selected = str(previous)
+                api.choose_period_compare("pcPreDir")
+                window.selected = str(central)
+                api.choose_period_compare("pcCentral")
+                window.selected = str(output)
+                api.choose_period_compare("pcOutput")
+
+            reloaded = WebApi(root)
+            self.assertEqual(reloaded.state["pcCurDir"], str(current.resolve()))
+            self.assertEqual(reloaded.state["pcPreDir"], str(previous.resolve()))
+            self.assertEqual(reloaded.state["pcCentral"], str(central.resolve()))
+            self.assertEqual(reloaded.state["pcOutput"], str(output.resolve()))
+            self.assertFalse(reloaded.state["pcOutputAuto"])
+
     def test_calculation_engine_setting_is_persisted_in_state(self) -> None:
         with TemporaryDirectory() as folder:
             api = WebApi(Path(folder))

@@ -7,10 +7,14 @@
   "history_config": "C:/Users/Azi/Desktop/VibeCode/1.HZPBC_/19.重构金融基础数据校验程序/unified/core/历史审核配置.xlsx",
   "output_pinned": false,
   "recursive_folders": true,
+  "recursive_depth": -1,
+  "extra_files": [
+    "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\单位贷款核查表\\执行结果\\机构审核副本_20260903222054\\广东博罗农村商业银行股份有限公司_金融基础数据-单位贷款_B00_2026-07-31_在线核查表_审核版.xlsx",
+    "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\单位贷款核查表\\执行结果\\机构审核副本_20260903222054\\惠东惠民村镇银行股份有限公司_金融基础数据-单位贷款_B00_2026-07-31_在线核查表_审核版.xlsx"
+  ],
   "write_flow_logs": false,
   "confirm_before_run": true,
   "calculation_engine": "自动",
-  "show_custom_features": false,
   "favorite_input_dirs": [],
   "favorite_template_dirs": [],
   "favorite_external_files": [],
@@ -18,5 +22,10 @@
   "recent_input_dirs": [],
   "recent_template_dirs": [],
   "recent_external_files": [],
-  "recent_output_dirs": []
+  "recent_output_dirs": [],
+  "period_current_dir": "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\2026.06 季报",
+  "period_previous_dir": "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\2026.03 按报表划分",
+  "period_central_file": "",
+  "period_output_dir": "C:\\Users\\Azi\\Desktop\\VibeCode\\1.HZPBC_\\19.重构金融基础数据校验程序\\2026-07-31\\2026.06 季报\\执行结果",
+  "period_output_auto": true
 }

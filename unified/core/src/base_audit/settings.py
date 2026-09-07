@@ -46,11 +46,14 @@ class UserSettings:
     history_config: str = ""
     output_pinned: bool = False
     recursive_folders: bool = True
+    # 递归深度：-1=最深处（默认）；0=仅根目录；N=最多进入 N 层子目录。
+    recursive_depth: int = -1
+    # 手动追加进待处理清单的文件（在源数据目录之外），跨会话保留。
+    extra_files: list[str] = field(default_factory=list)
     write_flow_logs: bool = False
     # 执行主流程前弹出待处理文件清单让用户确认。
     confirm_before_run: bool = True
     calculation_engine: str = "自动"
-    show_custom_features: bool = False
     favorite_input_dirs: list[FavoritePath] = field(default_factory=list)
     favorite_template_dirs: list[FavoritePath] = field(default_factory=list)
     favorite_external_files: list[FavoritePath] = field(default_factory=list)
@@ -59,6 +62,14 @@ class UserSettings:
     recent_template_dirs: list[str] = field(default_factory=list)
     recent_external_files: list[str] = field(default_factory=list)
     recent_output_dirs: list[str] = field(default_factory=list)
+    # 报表采集系统（跨期比较）独立保存的最近路径，不与逐笔统计系统混用。
+    period_current_dir: str = ""
+    period_previous_dir: str = ""
+    period_central_file: str = ""
+    period_output_dir: str = ""
+    period_output_auto: bool = True
+    # 报表采集系统：跨期比较配置.xlsx 的绑定路径（空 = 使用程序目录内置配置）。
+    period_config_file: str = ""
 
 
 class SettingsStore:
@@ -95,6 +106,9 @@ class SettingsStore:
             output_pinned=bool(payload.get("output_pinned", legacy_pinned)),
             # 说明报送文件通常按机构放在子目录，默认保持递归发现。
             recursive_folders=bool(payload.get("recursive_folders", True)),
+            # 旧设置只有布尔递归开关；迁移：true→最深处，false→仅根目录。
+            recursive_depth=int(payload.get("recursive_depth", -1 if bool(payload.get("recursive_folders", True)) else 0)),
+            extra_files=[str(item) for item in payload.get("extra_files", []) if isinstance(item, str) and item.strip()],
             # 运行日志可随时在设置中心开启；默认不额外生成日志工作簿。
             write_flow_logs=bool(payload.get("write_flow_logs", False)),
             # 执行前确认默认开启：误点主按钮时先看到文件清单，避免直接跑批。
@@ -104,8 +118,6 @@ class SettingsStore:
                 if str(payload.get("calculation_engine") or "自动") in CALCULATION_ENGINES
                 else "自动"
             ),
-            # 自定义流程入口默认收起，避免主界面堆积低频按钮。
-            show_custom_features=bool(payload.get("show_custom_features", False)),
             favorite_input_dirs=self._favorites(payload.get("favorite_input_dirs")),
             favorite_template_dirs=self._favorites(
                 payload.get("favorite_template_dirs")
@@ -118,6 +130,12 @@ class SettingsStore:
             recent_template_dirs=self._paths(payload.get("recent_template_dirs")),
             recent_external_files=self._paths(payload.get("recent_external_files")),
             recent_output_dirs=self._paths(payload.get("recent_output_dirs")),
+            period_current_dir=str(payload.get("period_current_dir") or ""),
+            period_previous_dir=str(payload.get("period_previous_dir") or ""),
+            period_central_file=str(payload.get("period_central_file") or ""),
+            period_output_dir=str(payload.get("period_output_dir") or ""),
+            period_output_auto=bool(payload.get("period_output_auto", True)),
+            period_config_file=str(payload.get("period_config_file") or ""),
         )
 
     def save(self, settings: UserSettings) -> None:

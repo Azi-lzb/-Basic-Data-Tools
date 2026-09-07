@@ -163,7 +163,7 @@ LOCAL_VALIDATION_IDENTITY_FIELDS = (
 def _composite_key(headers: list[str], row: list, key_fields: tuple[str, ...]) -> tuple[str, ...]:
     index = {name: i for i, name in enumerate(headers)}
     return tuple(
-        str(row[index[name]]).strip()
+        (str(row[index[name]]).strip() if row[index[name]] is not None else "")
         if name in index and index[name] < len(row)
         else ""
         for name in key_fields

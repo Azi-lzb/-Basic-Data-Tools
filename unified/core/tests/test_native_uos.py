@@ -347,3 +347,36 @@ def test_cli_run_dispatches_to_native(tmp_path: Path, monkeypatch) -> None:
             period="2026-08", history_path=tmp_path / "历史审核配置.xlsx", recursive=False,
         )
     assert result.successful_files == 1 and result.failed_files == 0
+
+
+# ---------------------------------------------------------------------------
+# 报表采集系统：跨期比较配置绑定（pcConfig）
+# ---------------------------------------------------------------------------
+
+def test_period_config_file_round_trip(tmp_path: Path) -> None:
+    stored = settings_mod.UserSettings(period_config_file="D:/配置/跨期比较配置.xlsx")
+    assert stored.period_config_file == "D:/配置/跨期比较配置.xlsx"
+
+
+def test_choose_period_compare_binds_config(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+    from base_audit.web_app import WebApi
+
+    target = tmp_path / "我的跨期比较配置.xlsx"
+    window = SimpleNamespace(create_file_dialog=lambda *args, **kwargs: (str(target),))
+    webview = SimpleNamespace(FileDialog=SimpleNamespace(OPEN=10, FOLDER=20), windows=[window])
+    with patch.dict(sys.modules, {"webview": webview}):
+        api = WebApi(tmp_path)
+        value = api.choose_period_compare("pcConfig")
+    assert value == str(target.resolve())
+    assert api.state["pcConfig"] == str(target.resolve())
+    assert api.settings.period_config_file == str(target.resolve())
+    # 重新加载后保持绑定
+    reloaded = WebApi(tmp_path)
+    assert reloaded.state["pcConfig"] == str(target.resolve())
+
+
+def test_state_has_default_period_config(tmp_path: Path) -> None:
+    from base_audit.web_app import WebApi
+    api = WebApi(tmp_path)
+    assert api.state["pcConfig"] == str(tmp_path / "跨期比较配置.xlsx")

@@ -60,8 +60,10 @@ class WebApi:
             "output": saved_output,
             "outputAuto": not self.settings.output_pinned,
             "outputPinned": self.settings.output_pinned,
-            "recursive": self.settings.recursive_folders,
+            "recursiveDepth": self.settings.recursive_depth,
+            "extraFiles": list(self.settings.extra_files),
             "writeFlowLogs": self.settings.write_flow_logs,
+            "confirmBeforeRun": self.settings.confirm_before_run,
             "calculationEngine": (
                 self.settings.calculation_engine
                 if self.settings.calculation_engine in valid_engine_values()
@@ -69,7 +71,6 @@ class WebApi:
             ),
             "engines": available_engines(),
             "engineHint": engine_hint(),
-            "showCustomFeatures": self.settings.show_custom_features,
             "sourceFiles": [],
             "selectedFiles": [],
             "mixedTemplates": [],
@@ -280,8 +281,6 @@ class WebApi:
 
     def get_custom_features(self) -> list[dict[str, Any]]:
         """Visible flat custom features for the workbench."""
-        if not self.state["showCustomFeatures"]:
-            return []
         return [
             {"id": item["id"], "name": item["name"], "flow": item["flow"], "remark": item["remark"]}
             for item in self._load_custom_features()
@@ -511,6 +510,179 @@ class WebApi:
             self._log(f"任务结束，本次耗时：{elapsed:.1f} 秒")
             self.state["busy"] = False
 
+    def append_extra_files(self) -> list[str]:
+        """待处理清单：弹窗批量追加文件（源数据目录之外也可）。"""
+        if self.state["busy"]:
+            return list(self.state.get("extraFiles", []))
+        import webview
+        file_dialog = getattr(webview, "FileDialog", None)
+        open_dialog = (
+            getattr(file_dialog, "OPEN", None)
+            if file_dialog is not None
+            else getattr(webview, "OPEN_DIALOG")
+        )
+        current = self.state.get("input") or str(self.project_root)
+        selected = webview.windows[0].create_file_dialog(
+            open_dialog,
+            directory=current,
+            allow_multiple=True,
+            file_types=("Excel 文件 (*.xlsx;*.xlsm;*.xls)",),
+        )
+        if not selected:
+            return list(self.state.get("extraFiles", []))
+        added = []
+        existing = set(self.state.get("extraFiles", []))
+        for item in selected:
+            path = str(Path(item).resolve())
+            if path not in existing and Path(path).is_file():
+                existing.add(path)
+                added.append(path)
+        if added:
+            self.state["extraFiles"] = sorted(existing)
+            self.settings.extra_files = list(self.state["extraFiles"])
+            self.settings_store.save(self.settings)
+            self._log(f"已追加 {len(added)} 个待处理文件")
+            self._recognize(allow_template_auto=False)
+        return list(self.state.get("extraFiles", []))
+
+    def remove_extra_file(self, path: str) -> list[str]:
+        """从追加清单移除一个手动追加的文件（不影响源数据目录扫描结果）。"""
+        files = [item for item in self.state.get("extraFiles", []) if item != path]
+        if len(files) != len(self.state.get("extraFiles", [])):
+            self.state["extraFiles"] = files
+            self.settings.extra_files = files
+            self.settings_store.save(self.settings)
+            self._log(f"已移除追加文件：{Path(path).name}")
+            self._recognize(allow_template_auto=False)
+            selected = [item for item in (self.state.get("selectedFiles") or []) if item != path]
+            self.state["selectedFiles"] = selected
+        return list(self.state.get("extraFiles", []))
+
+    def _refresh_period_pairs(self) -> None:
+        """按机构+表单配对两期已选目录中的文件，供报表采集页展示。"""
+        from .period_compare import list_period_pairs
+
+        cur = self.state.get("pcCurDir")
+        pre = self.state.get("pcPreDir")
+        if not cur and not pre:
+            self.state["periodPairs"] = []
+            return
+        try:
+            self.state["periodPairs"] = list_period_pairs(
+                Path(cur) if cur else None, Path(pre) if pre else None
+            )
+        except Exception as exc:
+            self.state["periodPairs"] = []
+            self._log(f"两期文件配对失败：{exc}")
+
+    def choose_period_compare(self, kind: str) -> str:
+        """报表采集系统页：选择跨期比较的路径（pcCurDir/pcPreDir/pcCentral）。
+
+        只弹窗并把结果记入 state，供页面回显；不触发执行。
+        """
+        if self.state["busy"] or kind not in {"pcCurDir", "pcPreDir", "pcCentral"}:
+            return ""
+        import webview
+        file_dialog = getattr(webview, "FileDialog", None)
+        folder_dialog = (
+            getattr(file_dialog, "FOLDER", None)
+            if file_dialog is not None
+            else getattr(webview, "FOLDER_DIALOG")
+        )
+        open_dialog = (
+            getattr(file_dialog, "OPEN", None)
+            if file_dialog is not None
+            else getattr(webview, "OPEN_DIALOG")
+        )
+        titles = {
+            "pcCurDir": "选择当期（本期）数据目录",
+            "pcPreDir": "选择上期数据目录",
+            "pcCentral": "选择大集中数据文件",
+        }
+        current = self.state.get(kind) or self.state.get("input") or str(self.project_root)
+        if kind == "pcCentral":
+            selected = webview.windows[0].create_file_dialog(
+                open_dialog,
+                directory=str(Path(current).parent) if Path(current).is_file() else current,
+                file_types=("Excel 文件 (*.xlsx;*.xlsm;*.xls)",),
+            )
+        else:
+            selected = webview.windows[0].create_file_dialog(
+                folder_dialog, directory=str(current)
+            )
+        value = str(selected[0]) if selected else ""
+        if value:
+            self.state[kind] = str(Path(value).resolve())
+            self._log(f"跨期比较：{'当期目录' if kind == 'pcCurDir' else '上期目录' if kind == 'pcPreDir' else '大集中数据'}已选择")
+        self._refresh_period_pairs()
+        return self.state.get(kind, "")
+
+    def start_period_compare(self) -> bool:
+        """报表采集系统页：用页面已选择的三路径启动跨期比较。"""
+        if self.state["busy"]:
+            return False
+        cur = self.state.get("pcCurDir")
+        pre = self.state.get("pcPreDir")
+        if not cur or not pre:
+            self._log("跨期比较失败：请先选择本期待处理与上期待处理目录")
+            return False
+        current_dir = Path(cur)
+        previous_dir = Path(pre)
+        central_raw = self.state.get("pcCentral")
+        central_path = Path(central_raw) if central_raw else None
+        if central_path is not None and not central_path.is_file():
+            self._log(f"跨期比较失败：大集中数据文件不存在：{central_path}")
+            return False
+        output_dir = Path(self.state.get("output") or (current_dir / "执行结果"))
+        self.state["busy"] = True
+        self.state["status"] = "正在执行跨期比较，请勿关闭窗口……"
+        self._log(f"开始跨期比较：当期“{current_dir.name}” vs 上期“{previous_dir.name}”")
+        threading.Thread(
+            target=self._period_compare_worker,
+            args=(current_dir, previous_dir, central_path, output_dir),
+            daemon=True,
+        ).start()
+        return True
+
+    def _period_compare_worker(
+        self,
+        current_dir: Path,
+        previous_dir: Path,
+        central_path: Path | None,
+        output_dir: Path,
+    ) -> None:
+        from .period_compare import (
+            PeriodCompareError,
+            ensure_default_config,
+            run_period_compare,
+        )
+
+        started = time.monotonic()
+        config_path = self.project_root / "跨期比较配置.xlsx"
+        try:
+            if ensure_default_config(config_path):
+                self._log(f"首次使用：已生成默认配置模板 {config_path.name}，可按需维护指标/机构/警戒区间")
+            output_path = run_period_compare(
+                current_dir=current_dir,
+                previous_dir=previous_dir,
+                central_path=central_path,
+                output_dir=output_dir,
+                config_path=config_path,
+                on_step=self._log_detail,
+            )
+            self.state["status"] = "跨期比较完成"
+            self._log(f"跨期比较完成：{output_path}")
+        except PeriodCompareError as exc:
+            self.state["status"] = "跨期比较失败"
+            self._log("跨期比较失败：" + str(exc))
+        except Exception as exc:
+            self.state["status"] = "跨期比较失败"
+            self._log("跨期比较失败：" + str(exc) + "\n" + traceback.format_exc())
+        finally:
+            elapsed = time.monotonic() - started
+            self._log(f"任务结束，本次耗时：{elapsed:.1f} 秒")
+            self.state["busy"] = False
+
     def update(self, values: dict[str, Any]) -> dict[str, Any]:
         for key in ("input", "templateDir", "template", "external", "output"):
             if key in values:
@@ -534,20 +706,36 @@ class WebApi:
             self.state["outputAuto"] = not pinned
             if not pinned and self.state["input"]:
                 self.state["output"] = str(Path(self.state["input"]) / "执行结果")
+        if "recursiveDepth" in values:
+            raw = values["recursiveDepth"]
+            try:
+                depth = int(raw)
+            except (TypeError, ValueError):
+                depth = -1 if str(raw).strip() in {"最深处", "true", "1", "是"} else 0
+            if depth != self.state["recursiveDepth"]:
+                self.state["recursiveDepth"] = depth
         if "recursive" in values:
             value = values["recursive"]
             recursive = (
                 value if isinstance(value, bool)
                 else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
             )
-            changed = recursive != self.state["recursive"]
-            self.state["recursive"] = recursive
+            depth = -1 if recursive else 0
+            changed = depth != self.state["recursiveDepth"]
+            self.state["recursiveDepth"] = depth
             if changed:
                 # 复选框直接决定待审核清单的扫描范围；不触发模板自动改写。
                 self._recognize(allow_template_auto=False)
         if "writeFlowLogs" in values:
             value = values["writeFlowLogs"]
             self.state["writeFlowLogs"] = (
+                value if isinstance(value, bool)
+                else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
+            )
+            self._save_settings()
+        if "confirmBeforeRun" in values:
+            value = values["confirmBeforeRun"]
+            self.state["confirmBeforeRun"] = (
                 value if isinstance(value, bool)
                 else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
             )
@@ -559,13 +747,6 @@ class WebApi:
             else:
                 self.state["calculationEngine"] = candidate
                 self._save_settings()
-        if "showCustomFeatures" in values:
-            value = values["showCustomFeatures"]
-            self.state["showCustomFeatures"] = (
-                value if isinstance(value, bool)
-                else str(value).strip().casefold() in {"1", "true", "yes", "y", "是"}
-            )
-            self._save_settings()
         return self.state
 
     def recognize(self) -> dict[str, Any]:
@@ -599,12 +780,12 @@ class WebApi:
         input_dir = Path(self.state["input"]) if self.state["input"] else None
         template_dir = Path(self.state["templateDir"]) if self.state["templateDir"] else None
         if input_dir and input_dir.is_dir():
-            period = detect_period(input_dir, recursive=bool(self.state["recursive"]))
+            period = detect_period(input_dir, recursive=self.state["recursiveDepth"])
             self.state["detectedPeriod"] = period.period
             self.state["explanationFiles"] = [
                 {"path": str(path), "name": path.name}
                 for path in explanation_files(
-                    input_dir, recursive=bool(self.state["recursive"])
+                    input_dir, recursive=self.state["recursiveDepth"]
                 )
             ]
             if not self.state["outputPinned"]:
@@ -615,7 +796,7 @@ class WebApi:
         if input_dir and template_dir and input_dir.is_dir() and template_dir.is_dir():
             files = classify_source_files(
                 template_dir, input_dir, self.project_root / "data" / "模板索引.json",
-                recursive=bool(self.state["recursive"]),
+                recursive=self.state["recursiveDepth"],
             )
             self.state["sourceFiles"] = files
             current = set(self.state.get("selectedFiles") or [])
@@ -634,7 +815,7 @@ class WebApi:
             if should_recommend:
                 result = recommend_template(
                     template_dir, input_dir, self.project_root / "data" / "模板索引.json",
-                    recursive=bool(self.state["recursive"]),
+                    recursive=self.state["recursiveDepth"],
                 )
                 if result.template_path:
                     self.state["template"] = str(result.template_path)
@@ -642,6 +823,19 @@ class WebApi:
                 self._log(result.details)
             if len(templates) > 1:
                 self._log("发现多种报表：" + "、".join(templates) + "。建议取消勾选不属于本次审核类型的文件。")
+            # 用户手动追加的文件（源数据目录之外）并入清单，同样参与模板匹配。
+            extra = [Path(path) for path in self.state.get("extraFiles", []) if Path(path).is_file()]
+            known = {item["path"] for item in files}
+            fresh = [path for path in extra if str(path.resolve()) not in known and path.parent != input_dir]
+            for path in fresh:
+                rows = classify_source_files(
+                    template_dir, path.parent, self.project_root / "data" / "模板索引.json",
+                    recursive=False,
+                )
+                for row in rows:
+                    if Path(row["path"]).resolve() == path.resolve() and row["path"] not in known:
+                        files.append(row)
+                        known.add(row["path"])
 
     def _worker(self, action: str, strict: bool = True) -> None:
         started = time.monotonic()
@@ -663,7 +857,7 @@ class WebApi:
             if action in {"check", "audit"} and not selected:
                 raise ValueError("请至少勾选一个待审核文件")
             if action == "check":
-                result = service.preflight(template_path=Path(self.state["template"]), input_dir=Path(self.state["input"]), output_dir=output, selected_files=selected, external_path=Path(self.state["external"]) if self.state["external"] else None, recursive=bool(self.state["recursive"]), on_step=self._log_detail)
+                result = service.preflight(template_path=Path(self.state["template"]), input_dir=Path(self.state["input"]), output_dir=output, selected_files=selected, external_path=Path(self.state["external"]) if self.state["external"] else None, extra_files=[Path(p) for p in self.state.get("extraFiles", [])], recursive=self.state["recursiveDepth"], on_step=self._log_detail)
             else:
                 if action == "audit":
                     action = "flow:汇总核查表校验"
@@ -684,7 +878,8 @@ class WebApi:
                     period="" if standalone_combine_flow else (self.state.get("detectedPeriod") or Path(self.state["input"]).name),
                     history_path=self.history_path, selected_files=selected,
                     external_path=None if standalone_combine_flow else (Path(self.state["external"]) if self.state["external"] else None),
-                    recursive=bool(self.state["recursive"]), on_step=self._log_detail, strict=strict,
+                    extra_files=[] if standalone_combine_flow else [Path(p) for p in self.state.get("extraFiles", [])],
+                    recursive=self.state["recursiveDepth"], on_step=self._log_detail, strict=strict,
                     write_flow_logs=bool(self.state["writeFlowLogs"]),
                 )
             self.state["status"] = result.summary_text().splitlines()[0]
@@ -736,10 +931,11 @@ class WebApi:
         self.settings.last_external_file = self.state["external"]
         self.settings.last_output_dir = self.state["output"]
         self.settings.output_pinned = bool(self.state["outputPinned"])
-        self.settings.recursive_folders = bool(self.state["recursive"])
+        self.settings.recursive_depth = int(self.state["recursiveDepth"])
+        self.settings.recursive_folders = self.settings.recursive_depth != 0
         self.settings.write_flow_logs = bool(self.state["writeFlowLogs"])
+        self.settings.confirm_before_run = bool(self.state["confirmBeforeRun"])
         self.settings.calculation_engine = str(self.state["calculationEngine"])
-        self.settings.show_custom_features = bool(self.state["showCustomFeatures"])
         self.settings_store.save(self.settings)
 
 
@@ -788,5 +984,33 @@ def launch_web(project_root: Path) -> None:
     html = bundle_root / "web" / "index.html" if getattr(sys, "frozen", False) else project_root / "frontend" / "web" / "index.html"
     if not html.is_file():
         raise RuntimeError("本地界面文件缺失")
-    webview.create_window("基础数据审核工具", html.as_uri(), js_api=WebApi(project_root), width=1180, height=820, min_size=(900, 650), frameless=True)
+    page = _bridge_alias_page(html)
+    # 使用操作系统原生标题栏（最小化/最大化/关闭由系统提供），界面内不再自绘。
+    webview.create_window("基础数据审核工具", page.as_uri(), js_api=WebApi(project_root), width=1180, height=820, min_size=(900, 650), frameless=False)
     webview.start(gui="edgechromium")
+
+
+def _bridge_alias_page(html: Path) -> Path:
+    """为真 pywebview 窗口生成带别名垫片的临时页面。
+
+    前端统一调用 ``bridge.api.方法名(...)`` 并等待 ``bridgeready``；pywebview
+    原生只提供 ``window.pywebview`` 和 ``pywebviewready``。这里在 <head> 注入
+    别名脚本把两者桥接起来，共用页面文件本身保持与 shell-flask 完全一致。
+    """
+    import tempfile
+
+    source = html.read_text(encoding="utf-8")
+    if "</head>" not in source:
+        raise RuntimeError("本地界面文件缺失 <head>，无法注入桥接别名")
+    alias = (
+        "<script>window.addEventListener('pywebviewready',function(){"
+        "window.bridge=window.pywebview;"
+        "window.dispatchEvent(new Event('bridgeready'));"
+        "});</script>"
+    )
+    handle, name = tempfile.mkstemp(prefix="audit_bridge_", suffix=".html")
+    import os as _os
+
+    with _os.fdopen(handle, "w", encoding="utf-8") as stream:
+        stream.write(source.replace("</head>", alias + "</head>", 1))
+    return Path(name)

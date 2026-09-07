@@ -61,11 +61,33 @@ def is_skipped_input_path(parts: tuple[str, ...]) -> bool:
     )
 
 
-def source_workbooks(input_dir: Path, *, recursive: bool = False) -> list[Path]:
+def _iter_by_depth(input_dir: Path, recursive: "bool | int"):
+    """按递归深度枚举 input_dir 下的所有路径。
+
+    ``True``/负数 = 递归到最深处（默认）；``False``/0 = 仅根目录；
+    正整数 N = 最多进入 N 层子目录（1 = 根目录加下一级文件夹）。
+    """
+    if recursive is True or (isinstance(recursive, int) and recursive < 0):
+        return input_dir.rglob("*")
+    if not recursive:
+        return input_dir.glob("*")
+    depth = int(recursive)
+    return (
+        path
+        for path in input_dir.rglob("*")
+        if len(path.relative_to(input_dir).parts) - 1 <= depth
+    )
+
+
+def source_workbooks(input_dir: Path, *, recursive: "bool | int" = False) -> list[Path]:
     """List original source workbooks, optionally including institution subfolders."""
     if not input_dir.is_dir():
         return []
-    iterator = input_dir.rglob("*.xlsx") if recursive else input_dir.glob("*.xlsx")
+    iterator = (
+        path
+        for path in _iter_by_depth(input_dir, recursive)
+        if path.suffix.lower() in SOURCE_SUFFIXES
+    )
     return sorted(
         path
         for path in iterator
@@ -82,7 +104,7 @@ def source_workbooks(input_dir: Path, *, recursive: bool = False) -> list[Path]:
 NON_XLSX_SKIPPED_SUFFIXES = {"", ".tmp", ".lnk", ".ini", ".db", ".log", ".json", ".cache"}
 
 
-def explanation_files(input_dir: Path, *, recursive: bool = False) -> list[Path]:
+def explanation_files(input_dir: Path, *, recursive: "bool | int" = False) -> list[Path]:
     """List non-xlsx attachment/explanation files from the source tree.
 
     Institutions sometimes upload their explanation as a .doc/.docx/.pdf
@@ -92,7 +114,7 @@ def explanation_files(input_dir: Path, *, recursive: bool = False) -> list[Path]
     """
     if not input_dir.is_dir():
         return []
-    iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
+    iterator = _iter_by_depth(input_dir, recursive)
     return sorted(
         path
         for path in iterator
@@ -116,7 +138,7 @@ def _periods_in_text(value: str) -> set[str]:
     return periods
 
 
-def detect_period(input_dir: Path, *, recursive: bool = False) -> PeriodDetection:
+def detect_period(input_dir: Path, *, recursive: "bool | int" = False) -> PeriodDetection:
     files = source_workbooks(input_dir, recursive=recursive)
     filename_periods: set[str] = set()
     for path in files:
@@ -290,7 +312,7 @@ def recommend_template(
     index_path: Path,
     *,
     force_index: bool = False,
-    recursive: bool = False,
+    recursive: "bool | int" = False,
 ) -> TemplateSuggestion:
     files = source_workbooks(input_dir, recursive=recursive)
     if not files:

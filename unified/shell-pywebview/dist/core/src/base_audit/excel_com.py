@@ -160,6 +160,12 @@ class ExcelUnavailableError(RuntimeError):
     pass
 
 
+from .com_message_filter import (
+    register_com_message_filter,
+    revoke_com_message_filter,
+)
+
+
 class ExcelSession:
     """Owns an isolated, hidden Excel process."""
 
@@ -179,9 +185,8 @@ class ExcelSession:
 
         if sys.platform != "win32":
             raise ExcelUnavailableError(
-                "当前操作系统不支持 Excel/WPS COM。统信 UOS / 麒麟版需使用 "
-                "LibreOffice Calc/UNO 计算引擎（适配进行中），Windows 版请使用 "
-                "Flask/windows 或 pywebview2/windows 发行包。"
+                "当前操作系统不支持 Excel/WPS COM。统信 UOS / 麒麟版已由原生管线"
+                "（LibreOffice Calc + openpyxl）自动接管；此会话仅在 Windows 可用。"
             )
         try:
             import pythoncom
@@ -193,6 +198,10 @@ class ExcelSession:
 
         self._pythoncom = pythoncom
         pythoncom.CoInitialize()
+        # Win7/慢速机器上 Excel 重算或保存时忙，COM 会以
+        # RPC_E_CALL_REJECTED（“被呼叫方拒绝接收呼叫”）拒绝呼入；
+        # 注册 IMessageFilter 让被拒呼叫自动挂起重试，而不是直接失败。
+        self._message_filter_registered = register_com_message_filter()
         last_error: Exception | None = None
         candidates = {
             "自动": (
@@ -242,6 +251,9 @@ class ExcelSession:
             except Exception:
                 pass
         self.excel = None
+        if getattr(self, "_message_filter_registered", False):
+            revoke_com_message_filter()
+            self._message_filter_registered = False
         if self._pythoncom is not None:
             self._pythoncom.CoUninitialize()
         self._pythoncom = None

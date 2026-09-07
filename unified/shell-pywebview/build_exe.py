@@ -96,6 +96,9 @@ def assemble_core() -> None:
     history = CORE / "历史审核配置.xlsx"
     if history.is_file():
         shutil.copy2(history, target / history.name)
+    config = CORE / "跨期比较配置.xlsx"
+    if config.is_file():
+        shutil.copy2(config, target / config.name)
     # tests 属于开发基线，不进发行包。
 
 
