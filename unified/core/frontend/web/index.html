@@ -695,8 +695,7 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
       <div class="card collect-card">
         <div class="field-head"><label>执行</label></div>
         <div class="actions" style="margin-top:2px">
-          <button class="btn primary" data-action="periodCompare" onclick="runPeriodCompare()" title="本期与上期逐指标比较，选了集中系统数据时一并核对">跨期比较</button>
-          <button class="btn" onclick="openLastPeriodOutput()" title="打开当前输出目录">打开输出目录</button>
+          <button class="btn primary" data-action="periodCompare" onclick="runPeriodCompare()" title="本期与上期逐指标比较，选了集中系统数据时一并核对">执行比较</button>
         </div>
         <p class="collect-tip">输出到本页设置的“输出目录”；原始文件不会被修改。</p>
       </div>
@@ -1033,11 +1032,6 @@ function applySwitchPage(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+page));
   if(page==='settings'&&!CFG.data){loadSettingsData()}
   if(page==='audit'){refresh()}
-}
-function openLastPeriodOutput(){
-  const dir=(state&&state.pcOutput)?state.pcOutput:((state&&state.pcCurDir)?state.pcCurDir.replace(/[\\/]$/,'')+'\\执行结果':'');
-  if(!dir){alert('尚未选择输出目录');return}
-  bridge.api.open_path(dir);
 }
 async function loadSettingsData(){
   CFG.data=null;CFG.dirty=false;CFG.saving=false;

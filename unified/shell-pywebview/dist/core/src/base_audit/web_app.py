@@ -75,9 +75,19 @@ class WebApi:
             "selectedFiles": [],
             "mixedTemplates": [],
             "explanationFiles": [],
+            # 报表采集系统路径：独立保存，不和逐笔统计系统的输入/输出混用。
+            "pcCurDir": self.settings.period_current_dir,
+            "pcPreDir": self.settings.period_previous_dir,
+            "pcCentral": self.settings.period_central_file,
+            "pcConfig": self.settings.period_config_file or str(project_root / "跨期比较配置.xlsx"),
+            "pcOutput": self.settings.period_output_dir,
+            "pcOutputAuto": self.settings.period_output_auto,
+            "periodPairs": [],
         }
         # This also performs the one-time non-destructive filename migration.
         initialize_config(self.history_path)
+        if self.state["pcCurDir"] or self.state["pcPreDir"]:
+            self._refresh_period_pairs()
 
     def get_state(self) -> dict[str, Any]:
         return self.state
@@ -576,11 +586,11 @@ class WebApi:
             self._log(f"两期文件配对失败：{exc}")
 
     def choose_period_compare(self, kind: str) -> str:
-        """报表采集系统页：选择跨期比较的路径（pcCurDir/pcPreDir/pcCentral）。
+        """报表采集系统页：选择跨期比较的输入或输出路径。
 
         只弹窗并把结果记入 state，供页面回显；不触发执行。
         """
-        if self.state["busy"] or kind not in {"pcCurDir", "pcPreDir", "pcCentral"}:
+        if self.state["busy"] or kind not in {"pcCurDir", "pcPreDir", "pcCentral", "pcConfig", "pcOutput"}:
             return ""
         import webview
         file_dialog = getattr(webview, "FileDialog", None)
@@ -598,9 +608,11 @@ class WebApi:
             "pcCurDir": "选择当期（本期）数据目录",
             "pcPreDir": "选择上期数据目录",
             "pcCentral": "选择大集中数据文件",
+            "pcConfig": "选择跨期比较配置.xlsx",
+            "pcOutput": "选择输出目录",
         }
         current = self.state.get(kind) or self.state.get("input") or str(self.project_root)
-        if kind == "pcCentral":
+        if kind == "pcCentral" or kind == "pcConfig":
             selected = webview.windows[0].create_file_dialog(
                 open_dialog,
                 directory=str(Path(current).parent) if Path(current).is_file() else current,
@@ -613,7 +625,16 @@ class WebApi:
         value = str(selected[0]) if selected else ""
         if value:
             self.state[kind] = str(Path(value).resolve())
-            self._log(f"跨期比较：{'当期目录' if kind == 'pcCurDir' else '上期目录' if kind == 'pcPreDir' else '大集中数据'}已选择")
+            if kind == "pcCurDir" and self.state.get("pcOutputAuto", True):
+                self.state["pcOutput"] = str(Path(value).resolve() / "执行结果")
+            elif kind == "pcOutput":
+                self.state["pcOutputAuto"] = False
+            label = {
+                "pcCurDir": "当期目录", "pcPreDir": "上期目录",
+                "pcCentral": "大集中数据", "pcConfig": "跨期比较配置", "pcOutput": "输出目录",
+            }[kind]
+            self._log(f"跨期比较：{label}已选择")
+            self._save_settings()
         self._refresh_period_pairs()
         return self.state.get(kind, "")
 
@@ -633,7 +654,7 @@ class WebApi:
         if central_path is not None and not central_path.is_file():
             self._log(f"跨期比较失败：大集中数据文件不存在：{central_path}")
             return False
-        output_dir = Path(self.state.get("output") or (current_dir / "执行结果"))
+        output_dir = Path(self.state.get("pcOutput") or (current_dir / "执行结果"))
         self.state["busy"] = True
         self.state["status"] = "正在执行跨期比较，请勿关闭窗口……"
         self._log(f"开始跨期比较：当期“{current_dir.name}” vs 上期“{previous_dir.name}”")
@@ -658,7 +679,7 @@ class WebApi:
         )
 
         started = time.monotonic()
-        config_path = self.project_root / "跨期比较配置.xlsx"
+        config_path = Path(self.state.get("pcConfig") or self.project_root / "跨期比较配置.xlsx")
         try:
             if ensure_default_config(config_path):
                 self._log(f"首次使用：已生成默认配置模板 {config_path.name}，可按需维护指标/机构/警戒区间")
@@ -936,6 +957,12 @@ class WebApi:
         self.settings.write_flow_logs = bool(self.state["writeFlowLogs"])
         self.settings.confirm_before_run = bool(self.state["confirmBeforeRun"])
         self.settings.calculation_engine = str(self.state["calculationEngine"])
+        self.settings.period_current_dir = str(self.state.get("pcCurDir") or "")
+        self.settings.period_previous_dir = str(self.state.get("pcPreDir") or "")
+        self.settings.period_central_file = str(self.state.get("pcCentral") or "")
+        self.settings.period_config_file = str(self.state.get("pcConfig") or "")
+        self.settings.period_output_dir = str(self.state.get("pcOutput") or "")
+        self.settings.period_output_auto = bool(self.state.get("pcOutputAuto", True))
         self.settings_store.save(self.settings)
 
 

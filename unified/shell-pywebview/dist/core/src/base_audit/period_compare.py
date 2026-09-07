@@ -353,6 +353,30 @@ def _read_sheet_rows(sheet_rows: Iterable[Iterable[Any]]) -> list[tuple[str, str
     return rows
 
 
+def _form_from_sheet(sheet_name: str, rows: list[tuple[str, str, Any]], fallback: str) -> str:
+    """从子工作表名称或指标编码取得稳定的报表标识。
+
+    按机构划分的导出常把子工作表直接命名为报表名称，而按报表划分的
+    导出则把子工作表命名为社会信用代码。后者不能把信用代码当作表单，
+    因此优先取工作表名中的 20201 等表单号；没有时再从指标编码前五位
+    推断，最后才保留有意义的工作表名称或文件名中的兜底表单号。
+    """
+    name = str(sheet_name or "").strip()
+    matched = re.search(r"(?<!\d)(20\d{3})(?!\d)", name)
+    if matched:
+        return matched.group(1)
+    # 中文报表名本身就是最清楚的子表身份；纯数字/字母的长串才可能是信用代码。
+    if name and name.casefold() not in {"sheet", "sheet1", "sheet2", "sheet3", "封面"} and not re.fullmatch(r"[0-9A-Za-z]{8,18}", name):
+        return name
+    for code, _indicator_name, _value in rows:
+        matched = re.match(r"^(20\d{3})\d{3,}$", str(code))
+        if matched:
+            return matched.group(1)
+    if name and name.casefold() not in {"sheet", "sheet1", "sheet2", "sheet3", "封面"}:
+        return name
+    return str(fallback or "").strip()
+
+
 def _open_read_only(path: Path):
     """按后缀分派 .xls（xlrd）/ .xlsx（openpyxl），返回 (sheet名→行迭代器) 工厂。"""
     suffix = path.suffix.casefold()
@@ -399,8 +423,8 @@ def parse_source_file(path: Path) -> list[IndicatorValue]:
             else:
                 raise PeriodCompareError(f"无法识别的导出文件名：{path.name}")
             for sheet_name in sheet_names:
-                form = sheet_name if re.search(r"202\d{2}", str(sheet_name)) else form_from_name
                 rows = _read_sheet_rows(make_rows(sheet_name))
+                form = _form_from_sheet(sheet_name, rows, form_from_name)
                 name_lookup = {code: value for code, _n, value in rows}
                 resolved_name = str(name_lookup.get(INDICATOR_NAME_CODE, "") or org_name)
                 resolved_code = str(name_lookup.get(INDICATOR_CODE_CODE, "") or org_code)
@@ -415,13 +439,14 @@ def list_period_pairs(
     current_dir: Path | None,
     previous_dir: Path | None,
 ) -> list[dict[str, object]]:
-    """按“机构 + 表单”配对两期文件，供界面展示谁和谁比。
+    """按“工作簿 → 工作表 → 机构 + 表单”配对两期数据，供界面展示。
 
     三种导出方式的配对键：
     - 逐机构逐表（机构代码#日期#01#表单#机构名）：机构名 + 表单号；
-    - 按机构划分（reports#代码#日期#01#机构名）：机构名（文件本身含全部表单）；
-    - 按报表划分（banks#日期#01#表单）：表单号（文件本身含全部机构）。
-    只在单期出现的文件同样列出，另一侧标记缺失，便于发现漏报。
+    - 按机构划分（reports#代码#日期#01#机构名）：逐子工作表配对；
+    - 按报表划分（banks#日期#01#表单）：逐社会信用代码子工作表配对。
+    每行均保留工作簿名、工作表名与数据日期。只在单期出现的子表同样列出，
+    另一侧标记缺失，便于发现漏报。
     """
 
     def collect(directory: Path | None) -> dict[tuple[str, str], dict[str, str]]:
@@ -431,16 +456,9 @@ def list_period_pairs(
         for path in sorted(directory.iterdir()):
             if not path.is_file() or path.suffix.casefold() not in {".xls", ".xlsx"} or path.name.startswith("~$"):
                 continue
-            segments = path.stem.split("#")
-            if len(segments) >= 4 and segments[0].casefold() == "banks":
-                key = ("（按报表划分）", segments[3])
-            elif len(segments) >= 5 and segments[0].casefold() == "reports":
-                key = (segments[4], "（全表单）")
-            elif len(segments) >= 5:
-                key = (segments[4], segments[3])
-            else:
-                key = (path.stem, "")
-            result[key] = {"name": path.name, "path": str(path)}
+            for item in _list_source_sheets(path):
+                key = (item["orgKey"], item["form"])
+                result[key] = item
         return result
 
     cur = collect(current_dir)
@@ -452,14 +470,66 @@ def list_period_pairs(
         rows.append({
             "org": key[0],
             "form": key[1],
+            "orgName": (cur_item or pre_item or {}).get("orgName", key[0]),
             "curName": cur_item["name"] if cur_item else "",
             "curPath": cur_item["path"] if cur_item else "",
+            "curSheet": cur_item["sheet"] if cur_item else "",
+            "curDate": cur_item["date"] if cur_item else "",
             "preName": pre_item["name"] if pre_item else "",
             "prePath": pre_item["path"] if pre_item else "",
+            "preSheet": pre_item["sheet"] if pre_item else "",
+            "preDate": pre_item["date"] if pre_item else "",
             "matched": cur_item is not None and pre_item is not None,
             "side": "both" if cur_item and pre_item else "cur" if cur_item else "pre",
         })
     return rows
+
+
+def _list_source_sheets(path: Path) -> list[dict[str, str]]:
+    """读取一份导出工作簿的子表身份，供跨期配对清单使用。"""
+    segments = path.stem.split("#")
+    sheet_names, make_rows, close = _open_read_only(path)
+    items: list[dict[str, str]] = []
+    try:
+        is_banks = len(segments) >= 4 and segments[0].casefold() == "banks"
+        if is_banks:
+            date, fallback_form = segments[1], segments[3]
+            fallback_org_code, fallback_org_name = "", ""
+        elif len(segments) >= 5:
+            if segments[0].casefold() == "reports":
+                fallback_org_code, date, fallback_form, fallback_org_name = (
+                    segments[1], segments[2], "", segments[4]
+                )
+            else:
+                fallback_org_code, date, fallback_form, fallback_org_name = (
+                    segments[0], segments[1], segments[3], segments[4]
+                )
+        else:
+            # 非标准命名也列出其工作表，避免在界面中静默漏掉文件。
+            date, fallback_form, fallback_org_code, fallback_org_name = "", "", "", path.stem
+
+        for sheet_name in sheet_names:
+            rows = _read_sheet_rows(make_rows(sheet_name))
+            if not rows:
+                continue
+            lookup = {code: value for code, _name, value in rows}
+            org_code = _norm_code(lookup.get(INDICATOR_CODE_CODE)) or _norm_code(fallback_org_code)
+            org_name = str(lookup.get(INDICATOR_NAME_CODE, "") or fallback_org_name or sheet_name).strip()
+            if is_banks and not org_code:
+                org_code = _norm_code(sheet_name)
+            form = _form_from_sheet(sheet_name, rows, fallback_form)
+            items.append({
+                "orgKey": org_code or org_name,
+                "orgName": org_name,
+                "form": form,
+                "name": path.name,
+                "path": str(path),
+                "sheet": str(sheet_name),
+                "date": str(date),
+            })
+    finally:
+        close()
+    return items
 
 
 def load_period_directory(

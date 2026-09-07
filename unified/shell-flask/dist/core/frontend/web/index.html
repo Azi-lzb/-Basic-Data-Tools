@@ -73,19 +73,18 @@ input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offse
 .paths-card{grid-column:1/-1}
 .paths-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 18px}
 .paths-grid .field{margin-bottom:0}
-/* 自定义功能卡片：与执行按钮卡片同宽，位于其下、待处理文件上方 */
-.card.custom-card{grid-column:1/-1;flex-direction:row;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px}
+/* 工作台：待处理文件在左，执行入口和自定义功能在右。 */
+.card.custom-card{flex-direction:column;align-items:stretch;gap:10px;padding:14px 18px}
 .card.custom-card .field-head{margin-bottom:0}
-.card.custom-card .custom-list{display:flex;flex-wrap:wrap;gap:10px;margin:0}
-/* 卡片内自定义功能项改为横排小按钮 */
-.card.custom-card .custom-item{width:auto;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;padding:8px 14px}
+.card.custom-card .custom-list{display:flex;flex-direction:column;gap:8px;margin:0}
+.card.custom-card .custom-item{width:100%;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;padding:8px 12px}
 .card.custom-card .custom-name{font-size:12.5px}
 .card.custom-card .custom-remark{font-size:10.5px}
-/* 主界面执行按钮行（独立卡片）：源数据目录与待审核文件之间 */
-.card.actionbar{grid-column:1/-1;flex-direction:row;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px}
-.files-wrap{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;min-height:0}
-/* 无机构说明文件时：只显示待审核文件，占满整行 */
-.files-wrap.only-files{grid-template-columns:minmax(0,1fr)}
+/* 右侧操作栏：汇总核查表校验在最上方，自定义功能紧随其后。 */
+.operation-stack{min-width:0;display:flex;flex-direction:column;gap:16px}
+.card.actionbar{flex-direction:column;align-items:stretch;gap:10px;padding:14px 18px}
+.card.actionbar .btn{width:100%}
+.files-wrap{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px;min-height:0;align-items:start}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:18px;min-width:0;display:flex;flex-direction:column}
 
 /* ---------- 通用字段 ---------- */
@@ -220,6 +219,22 @@ select:disabled{opacity:.6;cursor:not-allowed}
 .collect-card h2{margin:0 0 6px;font-size:15px}
 .collect-card p{margin:4px 0;color:var(--text-2);font-size:13px;line-height:1.7}
 .collect-tip{margin:8px 0 0;font-size:11.5px;color:var(--text-3);line-height:1.6}
+/* 两期配对清单：按“工作簿 → 工作表 → 机构 + 表单”同行展示 */
+.pair-list{margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden;max-height:320px;overflow-y:auto}
+.pair-row{display:grid;grid-template-columns:minmax(170px,.9fr) minmax(0,1.4fr) 26px minmax(0,1.4fr);align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.pair-row:last-child{border-bottom:none}
+.pair-target{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pair-source{min-width:0;display:flex;flex-direction:column;gap:3px;overflow:hidden}
+.pair-source-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2)}
+.pair-source-book{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3);font-size:11px}
+.pair-source-sheet{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3);font-size:11px}
+.pair-source.missing .pair-source-name{color:var(--danger);font-weight:600}
+.pair-vs{color:var(--text-3);text-align:center}
+/* 可点击的路径/文件名：链接态 */
+.path-name.link{color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:transparent;transition:text-decoration-color .15s}
+.path-name.link:hover{text-decoration-color:var(--accent)}
+.pair-source-book{color:var(--accent);cursor:pointer}
+.pair-source-book:hover{text-decoration:underline;text-underline-offset:3px}
 @media(max-width:980px){.collect-grid{grid-template-columns:1fr}}
 /* ---------- 设置中心（内嵌页，不再弹窗） ---------- */
 .settings-page{flex:1;min-height:0;padding:16px 18px;display:flex;flex-direction:column}
@@ -254,7 +269,23 @@ body.egg-locked .egg-btn{display:none}
 .settings-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:200px;color:var(--text-3);font-size:13px}
 .settings-load-error{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:200px;color:var(--danger);font-size:13px;text-align:center}
 /* 常规设置 */
-.general-group{margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+/* ToDesk 风格：分组卡片 + 行式设置（左名右控件）+ toggle 开关 */
+.gen-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 16px;border-bottom:1px solid var(--border)}
+.gen-row:last-child{border-bottom:none}
+.gen-row-name{font-size:13.5px;font-weight:600;color:var(--text)}
+.gen-row-desc{font-size:12px;color:var(--text-3);line-height:1.55;margin-top:2px}
+.gen-row-left{min-width:0;flex:1}
+.gen-row-right{flex:none;display:flex;align-items:center}
+.gen-select{min-width:200px;padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.gen-select:focus-visible{outline:2px solid var(--accent-ring);outline-offset:-2px}
+.gen-toggle{position:relative;width:44px;height:24px;flex:none;border:none;border-radius:999px;background:#cdd5df;cursor:pointer;transition:background .18s}
+.gen-toggle::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .18s}
+.gen-toggle.on{background:var(--accent)}
+.gen-toggle.on::after{left:23px}
+.gen-toggle:focus-visible{outline:2px solid var(--accent-ring);outline-offset:2px}
+.gen-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:18px;overflow:hidden}
+.gen-card-title{font-size:13px;font-weight:700;color:var(--text);margin:0 0 8px}
+.gen-group-plain{margin-bottom:16px}
 .general-group:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
 .danger-zone{border-top:1px solid var(--border);margin-top:8px;padding-top:16px}
 .danger-desc{margin:0 0 12px;font-size:11.5px;color:var(--text-3);line-height:1.7}
@@ -488,7 +519,7 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
 
 <div class="app-shell">
 <nav class="sidenav" id="sidenav">
-  <button type="button" class="sidenav-item active" data-page="audit" onclick="switchPage('audit')" title="逐笔统计系统：基础数据审核">
+  <button type="button" class="sidenav-item active" data-page="audit" onclick="openAuditWorkbench()" title="逐笔统计系统：基础数据审核">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
     逐笔统计系统
   </button>
@@ -569,21 +600,7 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
     </div>
   </section>
 
-  <div class="card custom-card" id="customCard" style="display:none">
-    <div class="field-head">
-      <label>自定义功能</label>
-    </div>
-    <div id="customList" class="custom-list"></div>
-  </div>
-
-  <div class="card actionbar">
-    <button class="btn primary" data-action="audit" onclick="startFlow('汇总核查表校验','audit')" title="内置模板体检与文件匹配，复制公式、重算并生成审核副本与问题汇总">汇总核查表校验</button>
-    <button class="btn" data-action="summary" onclick="startFlow('汇总校验结果说明','summary')" title="按“执行流程”的“汇总校验结果说明”流程执行区域汇总">汇总校验结果说明</button>
-    <button class="btn egg-btn" data-action="merge" onclick="startMerge()" title="按“组合联合核查表”流程把同一机构分散在多个报送工作簿里的数据合并为一本">组合联合核查表</button>
-    <button class="btn egg-btn" data-action="templateMerge" onclick="createTemplateMerge()" title="把多个模板的独有工作表合并成一本“联合模板”，低频的模板制作动作">制作联合模板</button>
-  </div>
-
-  <!-- 待审核文件（左 2/3）+ 机构说明文件（右 1/3）：同一行并排 -->
+  <!-- 待处理文件与执行入口并列；右侧由汇总核查表校验和隐藏的自定义功能组成。 -->
   <div class="files-wrap">
   <div class="file-panel">
     <div class="file-head">
@@ -601,11 +618,25 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
     </div>
   </div>
 
-  <div class="explanation-panel" id="explanation">
-    <div class="file-head">
-      <span class="file-title">机构说明文件 <span class="count-pill" id="explanationCount"></span></span>
+  <div class="operation-stack">
+    <div class="card actionbar">
+      <button class="btn primary" data-action="audit" onclick="startFlow('汇总核查表校验','audit')" title="内置模板体检与文件匹配，复制公式、重算并生成审核副本与问题汇总">汇总核查表校验</button>
+      <button class="btn" data-action="summary" onclick="startFlow('汇总校验结果说明','summary')" title="按“执行流程”的“汇总校验结果说明”流程执行区域汇总">汇总校验结果说明</button>
+      <button class="btn egg-btn" data-action="merge" onclick="startMerge()" title="按“组合联合核查表”流程把同一机构分散在多个报送工作簿里的数据合并为一本">组合联合核查表</button>
+      <button class="btn egg-btn" data-action="templateMerge" onclick="createTemplateMerge()" title="把多个模板的独有工作表合并成一本“联合模板”，低频的模板制作动作">制作联合模板</button>
     </div>
-    <div class="explanation-list" id="explanationList"></div>
+
+    <div class="card custom-card" id="customCard" style="display:none">
+      <div class="field-head"><label>自定义功能</label></div>
+      <div id="customList" class="custom-list"></div>
+    </div>
+
+    <div class="explanation-panel" id="explanation">
+      <div class="file-head">
+        <span class="file-title">机构说明文件 <span class="count-pill" id="explanationCount"></span></span>
+      </div>
+      <div class="explanation-list" id="explanationList"></div>
+    </div>
   </div>
   </div><!-- /files-wrap -->
 
@@ -614,32 +645,52 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
 
 <section class="page" id="page-collect">
   <div class="collect-page">
-    <div class="collect-grid">
-      <div class="card collect-card">
-        <div class="field-head"><label>本期待处理</label></div>
-        <div class="input-group">
-          <div class="path-name empty" id="pcCurName">未选择</div>
-          <button class="btn" onclick="pickPc('pcCurDir')" title="选择当期（本期）报送数据目录，支持逐机构逐表、按报表划分、按机构划分三种导出方式">选择</button>
+    <div class="card collect-card">
+      <div class="field-head"><label>待处理数据（两期）</label></div>
+      <div class="collect-grid">
+        <div class="field">
+          <div class="field-head"><label>本期待处理</label></div>
+          <div class="input-group">
+            <div class="path-name empty link" id="pcCurName" onclick="openPcPath('pcCurDir')" title="">未选择</div>
+            <button class="btn" onclick="pickPc('pcCurDir')" title="选择当期（本期）报送数据目录，支持逐机构逐表、按报表划分、按机构划分三种导出方式">选择</button>
+          </div>
         </div>
-        <p class="collect-tip">当期报送文件目录；三种系统导出方式自动识别。</p>
-      </div>
-      <div class="card collect-card">
-        <div class="field-head"><label>上期待处理</label></div>
-        <div class="input-group">
-          <div class="path-name empty" id="pcPreName">未选择</div>
-          <button class="btn" onclick="pickPc('pcPreDir')" title="选择上期报送数据目录；两期按机构名称和指标编号自动配对">选择</button>
+        <div class="field">
+          <div class="field-head"><label>上期待处理</label></div>
+          <div class="input-group">
+            <div class="path-name empty link" id="pcPreName" onclick="openPcPath('pcPreDir')" title="">未选择</div>
+            <button class="btn" onclick="pickPc('pcPreDir')" title="选择上期报送数据目录；两期按机构名称和指标编号自动配对">选择</button>
+          </div>
         </div>
-        <p class="collect-tip">上期报送文件目录；与当期自动配对比较。</p>
       </div>
+      <div class="pair-list" id="pairList"></div>
     </div>
     <div class="collect-grid">
       <div class="card collect-card">
-        <div class="field-head"><label>集中系统数据（可选）</label></div>
-        <div class="input-group">
-          <div class="path-name empty" id="pcCentralName">未选择</div>
-          <button class="btn" onclick="pickPc('pcCentral')" title="选择含“集中系统数据”与“参照表”的大集中工作簿；不需要核对时可不选">选择</button>
+        <div class="field">
+          <div class="field-head"><label>集中系统数据（可选）</label></div>
+          <div class="input-group">
+            <div class="path-name empty link" id="pcCentralName" onclick="openPcPath('pcCentral')" title="">未选择</div>
+            <button class="btn" onclick="pickPc('pcCentral')" title="选择含“集中系统数据”与“参照表”的大集中工作簿；不需要核对时可不选">选择</button>
+          </div>
+          <p class="collect-tip">大集中数据工作簿；不选则跳过与大集中核对。</p>
         </div>
-        <p class="collect-tip">大集中数据工作簿；不选则跳过与大集中核对。</p>
+        <div class="field">
+          <div class="field-head"><label>跨期比较配置</label></div>
+          <div class="input-group">
+            <div class="path-name link" id="pcConfigName" onclick="openPcPath('pcConfig')" title="">未选择</div>
+            <button class="btn" onclick="pickPc('pcConfig')" title="绑定跨期比较配置.xlsx（指标、机构与警戒区间）；默认使用程序目录内置配置">选择</button>
+          </div>
+          <p class="collect-tip">默认使用程序目录的“跨期比较配置.xlsx”；绑定后以所选文件为准。</p>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <div class="field-head"><label>输出目录</label></div>
+          <div class="input-group">
+            <div class="path-name empty link" id="pcOutputName" onclick="openPcPath('pcOutput')" title="">未选择</div>
+            <button class="btn" onclick="pickPc('pcOutput')" title="选择跨期比较结果的输出目录">选择</button>
+          </div>
+          <p class="collect-tip">默认跟随本期目录的“执行结果”；手动选择后会单独记住。</p>
+        </div>
       </div>
       <div class="card collect-card">
         <div class="field-head"><label>执行</label></div>
@@ -647,12 +698,12 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
           <button class="btn primary" data-action="periodCompare" onclick="runPeriodCompare()" title="本期与上期逐指标比较，选了集中系统数据时一并核对">跨期比较</button>
           <button class="btn" onclick="openLastPeriodOutput()" title="打开当前输出目录">打开输出目录</button>
         </div>
-        <p class="collect-tip">输出到逐笔统计系统设置的“输出目录”（默认当期目录\执行结果）；原始文件不会被修改。</p>
+        <p class="collect-tip">输出到本页设置的“输出目录”；原始文件不会被修改。</p>
       </div>
     </div>
     <div class="card collect-card">
       <h2>说明</h2>
-      <p>· 结果生成“跨期比较_时间戳.xlsx”，含“跨期比较”和“大集中比较”两张表；指标、机构与警戒区间在程序目录的“跨期比较配置.xlsx”中维护（已内置完整配置）。</p>
+      <p>· 结果生成“跨期比较_时间戳.xlsx”，含“跨期比较”和“大集中比较”两张表；指标、机构与警戒区间在本页绑定的“跨期比较配置.xlsx”中维护（默认使用程序目录内置配置，可点击绑定其他文件）。</p>
       <p>· “跨期比较”表：当期数/上期数（万元）、变动绝对值、环比变动、警戒区间备注、特殊指标提示、复杂校验勾稽关系。</p>
       <p>· “大集中比较”表：与大集中（集中系统）数据逐指标核对，差异超过 100 元的行在“是否说明”列标记。</p>
     </div>
@@ -984,7 +1035,7 @@ function applySwitchPage(page){
   if(page==='audit'){refresh()}
 }
 function openLastPeriodOutput(){
-  const dir=(state&&state.output)?state.output:'';
+  const dir=(state&&state.pcOutput)?state.pcOutput:((state&&state.pcCurDir)?state.pcCurDir.replace(/[\\/]$/,'')+'\\执行结果':'');
   if(!dir){alert('尚未选择输出目录');return}
   bridge.api.open_path(dir);
 }
@@ -1025,8 +1076,8 @@ function askDiscardSettings(target){
 }
 const ADVANCED_TABS=['moduleCatalog','modules','flows'];
 function isAdvancedTab(tab){return ADVANCED_TABS.indexOf(tab)>=0}
-/* ---- 彩蛋（统一入口：导航栏 1 秒内连点 5 次） ----
-   一次切换同时控制：设置中心的进阶页签、逐笔统计系统的“组合联合核查表/制作联合模板”按钮。
+/* ---- 彩蛋（统一入口：导航栏 2 秒内连点 5 次） ----
+   一次切换同时控制：设置中心的进阶页签、操作指引和逐笔统计系统中的低频功能。
    localStorage 记忆。 */
 function eggUnlocked(){
   return localStorage.getItem('uiEggUnlocked')==='1';
@@ -1034,18 +1085,20 @@ function eggUnlocked(){
 function applyEggState(){
   document.body.classList.toggle('egg-locked',!eggUnlocked());
   syncAdvancedNav();
+  setCustomCardVisibility();
+  if(CFG.tab==='guide'&&CFG.data)renderGuide();
 }
 let eggClickTimes=[];
 function registerEggClick(){
   const now=Date.now();
-  eggClickTimes=eggClickTimes.filter(t=>now-t<1000);
+  eggClickTimes=eggClickTimes.filter(t=>now-t<2000);
   eggClickTimes.push(now);
   if(eggClickTimes.length<5)return;
   eggClickTimes=[];
   const unlocked=!eggUnlocked();
   localStorage.setItem('uiEggUnlocked',unlocked?'1':'0');
   applyEggState();
-  showToast(unlocked?'已解锁隐藏功能（进阶设置、组合联合核查表、制作联合模板）':'已恢复默认界面');
+  showToast(unlocked?'已解锁隐藏功能（自定义功能、进阶设置、组合联合核查表、制作联合模板）':'已恢复默认界面');
 }
 function syncAdvancedNav(){
   const nav=document.getElementById('settingsNav');
@@ -1084,13 +1137,13 @@ function setSettingsTab(tab){
 const GUIDE_FLOWS=[
   {n:'1',name:'汇总核查表校验',scenario:'审核同一种基础数据报表，生成“本期审核结果”和各机构审核副本。',prep:'选择源数据目录；确认模板目录已存放对应模板；如模板公式依赖集中数据/参照表，再选择外部文件。',steps:'① 选择源数据目录；② 首次选择后核对自动识别的模板，必要时手动选择；③ 在待审核文件中取消本次不需处理的文件；④ 点击“汇总核查表校验”。',output:'执行结果目录下的本期审核结果、需要保留时的审核副本、流程运行日志。',tip:'原始报送文件不会修改；通常不需要勾选“递归子文件夹”。'},
   {n:'2',name:'汇总校验结果说明',scenario:'汇总机构报送的任务说明、业务说明、本地校验结果等文件；机构文件放在子文件夹时尤其适用。',prep:'选择包含校验结果及报送说明的源数据目录，并选择对应的汇总模板。',steps:'① 选择源数据目录；② 勾选“递归子文件夹”（文件分散在机构子目录时）；③ 核对待处理文件；④ 点击“汇总校验结果说明”。',output:'执行结果目录下的“校验结果与报送说明汇总”工作簿，以及可选运行日志。',tip:'模板表结构不匹配的文件会跳过，并在运行记录中提示。'},
-  {n:'3',name:'组合联合核查表',scenario:'文件名规范、需要把同一机构的多类报表（如个人贷款和单位贷款）合成一本，供制作联合模板或跨表核查。',prep:'源文件主名第一个下划线前必须是机构全称。',steps:'① 选择源数据目录；② 需要时勾选递归；③ 点击“组合联合核查表”。',output:'每家机构一本合并工作簿。',tip:'同名工作表只保留先复制的一张；本流程不需要模板、外部文件或数据期。'},
-  {n:'4',name:'制作联合模板',scenario:'需要把多个模板的独有工作表合并成一本“联合模板”，集中存放集中系统数据、参照表等公共依赖工作表，供跨表核查或制作模板时使用；这是低频的模板制作动作。',prep:'准备一个“基准模板”（包含集中系统数据、参照表等公共依赖工作表）和若干要并入的模板文件。',steps:'① 点击主界面“制作联合模板”按钮；② 阅读中文说明并确认；③ 第 1 步选择“基准模板”；④ 第 2 步批量选择“并入模板”；⑤ 等待制作完成。',output:'基准模板同级的“联合模板”目录：联合模板文件与“联合模板检查报告”。',tip:'基准模板只会另存为最终联合模板，原文件不修改；同名工作表保留先出现的一张，后续跳过；本动作不使用页面路径，也不会自动识别模板，不要将普通业务模板误选为基准模板。'}
+  {n:'3',name:'组合联合核查表',egg:true,scenario:'文件名规范、需要把同一机构的多类报表（如个人贷款和单位贷款）合成一本，供制作联合模板或跨表核查。',prep:'源文件主名第一个下划线前必须是机构全称。',steps:'① 选择源数据目录；② 需要时勾选递归；③ 点击“组合联合核查表”。',output:'每家机构一本合并工作簿。',tip:'同名工作表只保留先复制的一张；本流程不需要模板、外部文件或数据期。'},
+  {n:'4',name:'制作联合模板',egg:true,scenario:'需要把多个模板的独有工作表合并成一本“联合模板”，集中存放集中系统数据、参照表等公共依赖工作表，供跨表核查或制作模板时使用；这是低频的模板制作动作。',prep:'准备一个“基准模板”（包含集中系统数据、参照表等公共依赖工作表）和若干要并入的模板文件。',steps:'① 点击主界面“制作联合模板”按钮；② 阅读中文说明并确认；③ 第 1 步选择“基准模板”；④ 第 2 步批量选择“并入模板”；⑤ 等待制作完成。',output:'基准模板同级的“联合模板”目录：联合模板文件与“联合模板检查报告”。',tip:'基准模板只会另存为最终联合模板，原文件不修改；同名工作表保留先出现的一张，后续跳过；本动作不使用页面路径，也不会自动识别模板，不要将普通业务模板误选为基准模板。'}
 ];
 function renderGuide(){
   const pane=document.getElementById('settingsPane');
   let html='<p class="module-help-hint">以下为日常使用的常用流程；本页仅作操作帮助，不影响任何设置。</p>';
-  html+=GUIDE_FLOWS.map(f=>{
+  html+=GUIDE_FLOWS.filter(f=>!f.egg||eggUnlocked()).map(f=>{
       const rows=[['适用',f.scenario],['准备',f.prep],['步骤',f.steps],['输出',f.output],['提示',f.tip]];
       return '<details class="guide-flow-card" open>'
         +'<summary><span class="guide-flow-num">'+f.n+'</span><span>'+esc(f.name)+'</span></summary>'
@@ -1105,77 +1158,79 @@ function renderGeneral(){
   const pane=document.getElementById('settingsPane');
   const s=state||{};
   const engine=String(s.calculationEngine||'自动');
-  const html='<div class="general-group">'
-    +'<div class="general-group-title">计算引擎</div>'
-    +'<div class="engine-options">'
-    +'<label class="engine-option"><input type="radio" name="calcEngine" value="自动"'+(engine==='自动'?' checked':'')+' onchange="setEngine(\'自动\')"><span>自动（推荐）</span></label>'
-    +'<label class="engine-option"><input type="radio" name="calcEngine" value="Microsoft Excel"'+(engine==='Microsoft Excel'?' checked':'')+' onchange="setEngine(\'Microsoft Excel\')"><span>Microsoft Excel</span></label>'
-    +'<label class="engine-option"><input type="radio" name="calcEngine" value="WPS 表格"'+(engine==='WPS 表格'?' checked':'')+' onchange="setEngine(\'WPS 表格\')"><span>WPS 表格</span></label>'
+  const toggle=(id,on,desc)=>'<button type="button" class="gen-toggle'+(on?' on':'')+'" id="'+id+'" aria-pressed="'+(on?'true':'false')+'" onclick="toggleGenSetting(this)"></button>'+(desc?'':'');
+  const html=''
+    /* 计算引擎：多选一 → 下拉 */
+    +'<p class="gen-card-title">计算引擎</p>'
+    +'<div class="gen-card">'
+    +'<div class="gen-row">'
+    +'<div class="gen-row-left"><div class="gen-row-name">计算引擎</div><div class="gen-row-desc">自动模式优先 Microsoft Excel，无法启动时尝试 WPS 表格；指定引擎后不再自动切换。</div></div>'
+    +'<div class="gen-row-right"><select class="gen-select" id="setEngine" onchange="setEngine(this.value)">'
+    +'<option value="自动"'+(engine==='自动'?' selected':'')+'>自动（推荐）</option>'
+    +'<option value="Microsoft Excel"'+(engine==='Microsoft Excel'?' selected':'')+'>Microsoft Excel</option>'
+    +'<option value="WPS 表格"'+(engine==='WPS 表格'?' selected':'')+'>WPS 表格</option>'
+    +'</select></div>'
     +'</div>'
-    +'<p class="general-hint">自动模式优先使用 Microsoft Excel；无法启动时尝试 WPS 表格。指定引擎后，程序不会再自动切换，适合排查公式兼容性问题。</p>'
     +'</div>'
-    +'<div class="general-group">'
-    +'<div class="general-group-title">待处理文件</div>'
-    +'<label class="setting-row" title="递归扫描子文件夹的深度：0 层=仅根目录；1 层=包含下一级文件夹；最深处=所有子文件夹">'
-    +'<select id="setRecursiveDepth" onchange="setRecursiveDepth(this.value)">'
+    /* 待处理文件 */
+    +'<p class="gen-card-title">待处理文件</p>'
+    +'<div class="gen-card">'
+    +'<div class="gen-row">'
+    +'<div class="gen-row-left"><div class="gen-row-name">递归扫描深度</div><div class="gen-row-desc">0 层=仅根目录；1 层=包含下一级文件夹，以此类推。</div></div>'
+    +'<div class="gen-row-right"><select class="gen-select" id="setRecursiveDepth" onchange="setRecursiveDepth(this.value)">'
     +'<option value="-1">最深处（默认）</option><option value="0">仅根目录（0 层）</option><option value="1">1 层</option><option value="2">2 层</option><option value="3">3 层</option><option value="4">4 层</option>'
-    +'</select>'
-    +'<span><span class="setting-name">递归扫描深度</span>'
-    +'<span class="setting-desc">扫描源数据目录子文件夹的深度。0 层=仅根目录；1 层=包含下一级文件夹；以此类推。默认递归到最深处。</span></span>'
-    +'</label>'
-    +'<label class="setting-row" title="勾选后，每次执行流程生成“流程名_运行日志_时间戳.xlsx”；关闭后不生成该 Excel 日志，但界面运行记录仍保留">'
-    +'<input type="checkbox" id="setWriteFlowLogs" onchange="setWriteFlowLogs(this.checked)">'
-    +'<span><span class="setting-name">输出流程运行日志</span>'
-    +'<span class="setting-desc">关闭后不生成“流程名_运行日志_时间戳.xlsx”，页面运行记录仍保留。</span></span>'
-    +'</label>'
-    +'<label class="setting-row" title="勾选后，点击主界面执行按钮先弹出待处理文件清单，确认后才开始运行；自定义流程同样适用">'
-    +'<input type="checkbox" id="setConfirmBeforeRun" onchange="setConfirmBeforeRun(this.checked)">'
-    +'<span><span class="setting-name">执行前确认文件清单</span>'
-    +'<span class="setting-desc">点击主界面执行按钮时先弹出本次要处理的文件清单，确认后才开始运行，避免误点直接跑批。</span></span>'
-    +'</label>'
+    +'</select></div>'
     +'</div>'
-    +'<div class="general-group">'
-    +'<div class="general-group-title">界面</div>'
-    +'<label class="setting-row" title="控制主界面是否显示整块自定义功能按钮区；不改变各按钮自身的“是否显示”设置">'
-    +'<input type="checkbox" id="setShowCustom" onchange="setShowCustom(this.checked)">'
-    +'<span><span class="setting-name">显示自定义功能</span>'
-    +'<span class="setting-desc">控制主界面是否显示整块自定义功能按钮区；不改变各按钮自身的“是否显示”设置。</span></span>'
-    +'</label>'
-    +'<label class="setting-row" title="仅控制页面日志是否显示后端标注为 detail 的明细；不影响任务运行、不影响“输出流程运行日志”开关、不影响 xlsx">'
-    +'<span><span class="setting-name">日志展示方式</span></span>'
-    +'</label>'
-    +'<div class="engine-options">'
-    +'<label class="engine-option"><input type="radio" name="logMode" value="简洁"'+(logFull?'':' checked')+' onchange="setLogMode(false)"><span>简洁（默认）</span></label>'
-    +'<label class="engine-option"><input type="radio" name="logMode" value="全量"'+(logFull?' checked':'')+' onchange="setLogMode(true)"><span>全量</span></label>'
+    +'<div class="gen-row">'
+    +'<div class="gen-row-left"><div class="gen-row-name">输出流程运行日志</div><div class="gen-row-desc">每次执行生成“流程名_运行日志_时间戳.xlsx”；关闭后仅保留页面运行记录。</div></div>'
+    +'<div class="gen-row-right">'+toggle('setWriteFlowLogs',!!s.writeFlowLogs)+'</div>'
     +'</div>'
-    +'<p class="general-hint">简洁隐藏后端标注为明细的运行记录，全量显示所有记录；仅影响页面展示，不影响任务执行或运行日志文件。</p>'
+    +'<div class="gen-row">'
+    +'<div class="gen-row-left"><div class="gen-row-name">执行前确认文件清单</div><div class="gen-row-desc">点执行按钮先弹出本次要处理的文件清单，确认后才开始运行。</div></div>'
+    +'<div class="gen-row-right">'+toggle('setConfirmBeforeRun',!!s.confirmBeforeRun)+'</div>'
     +'</div>'
-    +'<div class="general-group danger-zone">'
-    +'<div class="general-group-title">恢复默认设置</div>'
-    +'<p class="danger-desc">还原模块、流程和按钮的初始设置；不会修改计算引擎、常用路径或历史审核说明。</p>'
-    +'<button class="btn danger" onclick="askResetConfig()">恢复默认设置</button>'
+    +'</div>'
+    /* 界面 */
+    +'<p class="gen-card-title">界面</p>'
+    +'<div class="gen-card">'
+    +'<div class="gen-row">'
+    +'<div class="gen-row-left"><div class="gen-row-name">日志展示方式</div><div class="gen-row-desc">简洁隐藏运行明细，全量显示所有记录；仅影响页面展示。</div></div>'
+    +'<div class="gen-row-right"><select class="gen-select" id="setLogMode" onchange="setLogMode(this.value===&quot;全量&quot;)">'
+    +'<option value="简洁"'+(logFull?'':' selected')+'>简洁（默认）</option>'
+    +'<option value="全量"'+(logFull?' selected':'')+'>全量</option>'
+    +'</select></div>'
+    +'</div>'
+    +'</div>'
+    /* 恢复默认 */
+    +'<p class="gen-card-title">恢复默认设置</p>'
+    +'<div class="gen-card">'
+    +'<div class="gen-row">'
+    +'<div class="gen-row-left"><div class="gen-row-name">还原模块、流程和按钮的初始设置</div><div class="gen-row-desc">不会修改计算引擎、常用路径或历史审核说明。</div></div>'
+    +'<div class="gen-row-right"><button class="btn danger" onclick="askResetConfig()">恢复默认</button></div>'
+    +'</div>'
     +'</div>';
   pane.innerHTML=html;
   syncGeneralControls();
 }
+/* toggle 开关统一处理 */
+function toggleGenSetting(btn){
+  const on=!btn.classList.contains('on');
+  btn.classList.toggle('on',on);
+  btn.setAttribute('aria-pressed',on?'true':'false');
+  if(btn.id==='setWriteFlowLogs')setWriteFlowLogs(on);
+  else if(btn.id==='setConfirmBeforeRun')setConfirmBeforeRun(on);
+}
 function syncGeneralControls(){
   const s=state||{};
-  const depthSel=document.getElementById('setRecursiveDepth');
-  if(depthSel){
-    depthSel.value=String((s.recursiveDepth===undefined||s.recursiveDepth===null)?-1:s.recursiveDepth);
-    if(depthSel.selectedIndex<0)depthSel.value='-1';
-    depthSel.disabled=!!s.busy;
-    const r=depthSel.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy);
-  }
-  const lg=document.getElementById('setWriteFlowLogs');
-  if(lg){lg.checked=!!s.writeFlowLogs;lg.disabled=!!s.busy;const r=lg.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy)}
-  const cb=document.getElementById('setConfirmBeforeRun');
-  if(cb){cb.checked=(s.confirmBeforeRun!==false);cb.disabled=!!s.busy;const r=cb.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy)}
-  const sc=document.getElementById('setShowCustom');
-  if(sc){sc.checked=!!s.showCustomFeatures;sc.disabled=!!s.busy;const r=sc.closest('.setting-row');if(r)r.classList.toggle('disabled',!!s.busy)}
-  const engine=String(s.calculationEngine||'自动');
-  document.querySelectorAll('input[name=calcEngine]').forEach(r=>{r.checked=(r.value===engine);r.disabled=!!s.busy});
-  document.querySelectorAll('input[name=logMode]').forEach(r=>{r.checked=((r.value==='全量')===!!logFull);r.disabled=!!s.busy});
+  const busy=!!s.busy;
+  const syncSel=(id,value)=>{const el=document.getElementById(id);if(el){el.value=String(value);if(el.selectedIndex<0)el.value=el.options[0]?el.options[0].value:'';el.disabled=busy}};
+  const syncToggle=(id,on)=>{const el=document.getElementById(id);if(el){el.classList.toggle('on',!!on);el.setAttribute('aria-pressed',on?'true':'false');el.disabled=busy}};
+  syncSel('setRecursiveDepth',(s.recursiveDepth===undefined||s.recursiveDepth===null)?-1:s.recursiveDepth);
+  syncSel('setEngine',String(s.calculationEngine||'自动'));
+  syncSel('setLogMode',logFull?'全量':'简洁');
+  syncToggle('setWriteFlowLogs',!!s.writeFlowLogs);
+  syncToggle('setConfirmBeforeRun',s.confirmBeforeRun!==false);
+  syncToggle('setShowCustom',!!s.showCustomFeatures);
 }
 async function appendExtraFiles(){
   if(state&&state.busy)return;
@@ -1194,12 +1249,6 @@ async function setRecursiveDepth(value){
 }
 async function setWriteFlowLogs(checked){await bridge.api.update({writeFlowLogs:checked})}
 async function setConfirmBeforeRun(checked){await bridge.api.update({confirmBeforeRun:checked})}
-async function setShowCustom(checked){
-  await bridge.api.update({showCustomFeatures:checked});
-  const cf=document.getElementById('customCard');
-  if(cf)cf.style.display=checked?'block':'none';
-  refreshCustomButtons();
-}
 async function setEngine(value){
   if(state&&state.busy)return;
   try{await bridge.api.update({calculationEngine:value})}catch(e){}
@@ -1674,18 +1723,26 @@ async function openGuide(){await bridge.api.open_user_guide()}
 function openAbout(){document.getElementById('aboutMask').style.display='flex'}
 function closeAbout(){document.getElementById('aboutMask').style.display='none'}
 let customFeatures=[],pendingConfirm=null;
+
+/* “逐笔统计系统”导航项连续点击五次会解锁同一组彩蛋入口。 */
+function openAuditWorkbench(){switchPage('audit')}
+function setCustomCardVisibility(){
+  const card=document.getElementById('customCard');
+  if(card)card.style.display=eggUnlocked()&&customFeatures.length?'flex':'none';
+}
 async function loadCustom(){customFeatures=await bridge.api.get_custom_features()||[];renderCustom(customFeatures)}
 /* 设置中心保存成功后调用：立即刷新主界面的显示流程 */
 function refreshCustomButtons(){loadCustom()}
 function renderCustom(features){
   const box=document.getElementById('customList');
-  if(!features.length){box.innerHTML='';return}
+  if(!features.length){box.innerHTML='';setCustomCardVisibility();return}
   box.innerHTML=features.map(f=>{
     const tip=f.remark?esc(f.remark):esc(f.name);
     return '<button type="button" class="custom-item" onclick="askRun(\''+esc(f.id)+'\')" title="'+tip+'">'
       +'<span class="custom-name">'+esc(f.name)+'</span>'
       +(f.remark?'<span class="custom-remark">'+esc(f.remark)+'</span>':'')+'</button>';
   }).join('');
+  setCustomCardVisibility();
 }
 function askRun(id){
   const f=customFeatures.find(x=>x.id===id)||{};
@@ -1833,6 +1890,8 @@ const PC_FIELDS = [
   ["pcCurDir", "pcCurName", "当期数据目录"],
   ["pcPreDir", "pcPreName", "上期数据目录"],
   ["pcCentral", "pcCentralName", "集中系统数据"],
+  ["pcConfig", "pcConfigName", "跨期比较配置"],
+  ["pcOutput", "pcOutputName", "输出目录"],
 ];
 function renderCollect(state){
   for(const [key, nameId] of PC_FIELDS){
@@ -1841,8 +1900,55 @@ function renderCollect(state){
     const v=state[key]||"";
     el.textContent=v?v.split(/[\/]/).pop():'未选择';
     el.classList.toggle('empty',!v);
-    el.title=v;
+    el.classList.toggle('link',!!v);
+    el.title=v?'点击打开：'+v:'';
   }
+  renderPairList(state.periodPairs||[]);
+}
+/* 配对清单里的工作簿名精简：去掉代码/导出方式前缀段 */
+document.getElementById('pairList').addEventListener('click',e=>{
+  const book=e.target.closest('[data-open]');
+  if(book&&book.dataset.open){bridge.api.open_path(book.dataset.open)}
+});
+function shortPairBook(name){
+  const parts=String(name||'').replace(/\.xls$/i,'').split('#');
+  if(parts.length<2)return String(name||'');
+  return parts.slice(1).join(' · ');
+}
+function renderPairList(pairs){
+  const box=document.getElementById('pairList');
+  if(!box)return;
+  if(!pairs.length){
+    box.style.display='none';
+    return;
+  }
+  box.style.display='block';
+  const both=pairs.filter(p=>p.side==='both').length;
+  const missing=pairs.length-both;
+  const head='<div class="pair-row" style="background:var(--surface-2)">'
+    +'<span class="pair-target">对比对象（'+both+' 对齐全'+(missing?'，'+missing+' 项单边':'')+'）</span>'
+    +'<span style="font-weight:600;color:var(--text-2)">本期：工作簿 → 工作表</span>'
+    +'<span class="pair-vs">比</span><span style="font-weight:600;color:var(--text-2)">上期：工作簿 → 工作表</span></div>';
+  box.innerHTML=head+pairs.map(r=>{
+    const org=r.orgName||r.org||'未识别机构';
+    const form=r.form||'未识别表单';
+    const target=org+' · '+form;
+    const curIdentity='本期-'+(r.curDate||'未识别日期')+'-'+org+'-'+form;
+    const preIdentity='上期-'+(r.preDate||'未识别日期')+'-'+org+'-'+form;
+    const cur=r.curName?'<span class="pair-source" title="点击打开：'+esc(r.curPath)+'"><span class="pair-source-name">'+esc(curIdentity)+'</span><span class="pair-source-book" data-open="'+esc(r.curPath)+'">工作簿：'+esc(shortPairBook(r.curName))+'</span><span class="pair-source-sheet">工作表：'+esc(r.curSheet||'未识别')+'</span></span>'
+      :'<span class="pair-source missing"><span class="pair-source-name">— 缺失</span></span>';
+    const pre=r.preName?'<span class="pair-source" title="点击打开：'+esc(r.prePath)+'"><span class="pair-source-name">'+esc(preIdentity)+'</span><span class="pair-source-book" data-open="'+esc(r.prePath)+'">工作簿：'+esc(shortPairBook(r.preName))+'</span><span class="pair-source-sheet">工作表：'+esc(r.preSheet||'未识别')+'</span></span>'
+      :'<span class="pair-source missing"><span class="pair-source-name">— 缺失</span></span>';
+    return '<div class="pair-row">'
+      +'<span class="pair-target" title="'+esc(target)+'">'+esc(target)+'</span>'
+      +cur+'<span class="pair-vs">vs</span>'+pre
+      +'</div>';
+  }).join('');
+}
+function openPcPath(key){
+  const v=state?state[key]:'';
+  if(!v){return}
+  bridge.api.open_path(v);
 }
 async function pickPc(key){
   if(state&&state.busy)return;
@@ -1866,7 +1972,7 @@ function runPeriodCompare(){
   document.getElementById('confirmOk').textContent='开始比较';
   const central=state.pcCentral?'已选择，将一并与大集中核对':'未选择，将跳过大集中核对';
   document.getElementById('confirmMsg').textContent='将比较当期与上期报送数据（逐机构、逐指标），'+central+'。\n\n'
-    +'结果输出到“'+(state.output||'当期目录\\执行结果')+'”。原始报送文件不会被修改。\n\n'
+    +'结果输出到“'+(state.pcOutput||'当期目录\\执行结果')+'”。原始报送文件不会被修改。\n\n'
     +'请确认后再开始，比较期间请勿操作本页面。';
   document.getElementById('confirmMask').style.display='flex';
 }
@@ -2020,8 +2126,7 @@ async function refresh(){
   else if(/失败|异常|错误/.test(s.status))statusEl.classList.add('error');
   const st=document.getElementById('statusText');st.textContent=s.status;st.title=s.status;
   syncGeneralControls();
-  const cfEl=document.getElementById('customCard');
-  if(cfEl)cfEl.style.display=!!s.showCustomFeatures?'block':'none';
+  setCustomCardVisibility();
   const pinEl=document.getElementById('outputPin');
   if(pinEl){
     const on=!!s.outputPinned;

@@ -219,15 +219,22 @@ select:disabled{opacity:.6;cursor:not-allowed}
 .collect-card h2{margin:0 0 6px;font-size:15px}
 .collect-card p{margin:4px 0;color:var(--text-2);font-size:13px;line-height:1.7}
 .collect-tip{margin:8px 0 0;font-size:11.5px;color:var(--text-3);line-height:1.6}
-/* 两期配对清单：同一机构同一表单的当期/上期文件同行展示 */
+/* 两期配对清单：按“工作簿 → 工作表 → 机构 + 表单”同行展示 */
 .pair-list{margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden;max-height:320px;overflow-y:auto}
-.pair-row{display:grid;grid-template-columns:minmax(0,1.1fr) 54px minmax(0,1.4fr) 26px minmax(0,1.4fr);align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.pair-row{display:grid;grid-template-columns:minmax(170px,.9fr) minmax(0,1.4fr) 26px minmax(0,1.4fr);align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}
 .pair-row:last-child{border-bottom:none}
-.pair-org{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pair-form{flex:none;display:inline-block;padding:1px 8px;border-radius:7px;background:var(--surface-2);color:var(--text-2);font-size:11px;text-align:center}
-.pair-file{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2)}
-.pair-file.missing{color:var(--danger);font-weight:600}
+.pair-target{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pair-source{min-width:0;display:flex;flex-direction:column;gap:3px;overflow:hidden}
+.pair-source-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2)}
+.pair-source-book{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3);font-size:11px}
+.pair-source-sheet{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3);font-size:11px}
+.pair-source.missing .pair-source-name{color:var(--danger);font-weight:600}
 .pair-vs{color:var(--text-3);text-align:center}
+/* 可点击的路径/文件名：链接态 */
+.path-name.link{color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:transparent;transition:text-decoration-color .15s}
+.path-name.link:hover{text-decoration-color:var(--accent)}
+.pair-source-book{color:var(--accent);cursor:pointer}
+.pair-source-book:hover{text-decoration:underline;text-underline-offset:3px}
 @media(max-width:980px){.collect-grid{grid-template-columns:1fr}}
 /* ---------- 设置中心（内嵌页，不再弹窗） ---------- */
 .settings-page{flex:1;min-height:0;padding:16px 18px;display:flex;flex-direction:column}
@@ -644,14 +651,14 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
         <div class="field">
           <div class="field-head"><label>本期待处理</label></div>
           <div class="input-group">
-            <div class="path-name empty" id="pcCurName">未选择</div>
+            <div class="path-name empty link" id="pcCurName" onclick="openPcPath('pcCurDir')" title="">未选择</div>
             <button class="btn" onclick="pickPc('pcCurDir')" title="选择当期（本期）报送数据目录，支持逐机构逐表、按报表划分、按机构划分三种导出方式">选择</button>
           </div>
         </div>
         <div class="field">
           <div class="field-head"><label>上期待处理</label></div>
           <div class="input-group">
-            <div class="path-name empty" id="pcPreName">未选择</div>
+            <div class="path-name empty link" id="pcPreName" onclick="openPcPath('pcPreDir')" title="">未选择</div>
             <button class="btn" onclick="pickPc('pcPreDir')" title="选择上期报送数据目录；两期按机构名称和指标编号自动配对">选择</button>
           </div>
         </div>
@@ -660,12 +667,30 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
     </div>
     <div class="collect-grid">
       <div class="card collect-card">
-        <div class="field-head"><label>集中系统数据（可选）</label></div>
-        <div class="input-group">
-          <div class="path-name empty" id="pcCentralName">未选择</div>
-          <button class="btn" onclick="pickPc('pcCentral')" title="选择含“集中系统数据”与“参照表”的大集中工作簿；不需要核对时可不选">选择</button>
+        <div class="field">
+          <div class="field-head"><label>集中系统数据（可选）</label></div>
+          <div class="input-group">
+            <div class="path-name empty link" id="pcCentralName" onclick="openPcPath('pcCentral')" title="">未选择</div>
+            <button class="btn" onclick="pickPc('pcCentral')" title="选择含“集中系统数据”与“参照表”的大集中工作簿；不需要核对时可不选">选择</button>
+          </div>
+          <p class="collect-tip">大集中数据工作簿；不选则跳过与大集中核对。</p>
         </div>
-        <p class="collect-tip">大集中数据工作簿；不选则跳过与大集中核对。</p>
+        <div class="field">
+          <div class="field-head"><label>跨期比较配置</label></div>
+          <div class="input-group">
+            <div class="path-name link" id="pcConfigName" onclick="openPcPath('pcConfig')" title="">未选择</div>
+            <button class="btn" onclick="pickPc('pcConfig')" title="绑定跨期比较配置.xlsx（指标、机构与警戒区间）；默认使用程序目录内置配置">选择</button>
+          </div>
+          <p class="collect-tip">默认使用程序目录的“跨期比较配置.xlsx”；绑定后以所选文件为准。</p>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <div class="field-head"><label>输出目录</label></div>
+          <div class="input-group">
+            <div class="path-name empty link" id="pcOutputName" onclick="openPcPath('pcOutput')" title="">未选择</div>
+            <button class="btn" onclick="pickPc('pcOutput')" title="选择跨期比较结果的输出目录">选择</button>
+          </div>
+          <p class="collect-tip">默认跟随本期目录的“执行结果”；手动选择后会单独记住。</p>
+        </div>
       </div>
       <div class="card collect-card">
         <div class="field-head"><label>执行</label></div>
@@ -673,12 +698,12 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
           <button class="btn primary" data-action="periodCompare" onclick="runPeriodCompare()" title="本期与上期逐指标比较，选了集中系统数据时一并核对">跨期比较</button>
           <button class="btn" onclick="openLastPeriodOutput()" title="打开当前输出目录">打开输出目录</button>
         </div>
-        <p class="collect-tip">输出到逐笔统计系统设置的“输出目录”（默认当期目录\执行结果）；原始文件不会被修改。</p>
+        <p class="collect-tip">输出到本页设置的“输出目录”；原始文件不会被修改。</p>
       </div>
     </div>
     <div class="card collect-card">
       <h2>说明</h2>
-      <p>· 结果生成“跨期比较_时间戳.xlsx”，含“跨期比较”和“大集中比较”两张表；指标、机构与警戒区间在程序目录的“跨期比较配置.xlsx”中维护（已内置完整配置）。</p>
+      <p>· 结果生成“跨期比较_时间戳.xlsx”，含“跨期比较”和“大集中比较”两张表；指标、机构与警戒区间在本页绑定的“跨期比较配置.xlsx”中维护（默认使用程序目录内置配置，可点击绑定其他文件）。</p>
       <p>· “跨期比较”表：当期数/上期数（万元）、变动绝对值、环比变动、警戒区间备注、特殊指标提示、复杂校验勾稽关系。</p>
       <p>· “大集中比较”表：与大集中（集中系统）数据逐指标核对，差异超过 100 元的行在“是否说明”列标记。</p>
     </div>
@@ -1010,7 +1035,7 @@ function applySwitchPage(page){
   if(page==='audit'){refresh()}
 }
 function openLastPeriodOutput(){
-  const dir=(state&&state.output)?state.output:'';
+  const dir=(state&&state.pcOutput)?state.pcOutput:((state&&state.pcCurDir)?state.pcCurDir.replace(/[\\/]$/,'')+'\\执行结果':'');
   if(!dir){alert('尚未选择输出目录');return}
   bridge.api.open_path(dir);
 }
@@ -1865,6 +1890,8 @@ const PC_FIELDS = [
   ["pcCurDir", "pcCurName", "当期数据目录"],
   ["pcPreDir", "pcPreName", "上期数据目录"],
   ["pcCentral", "pcCentralName", "集中系统数据"],
+  ["pcConfig", "pcConfigName", "跨期比较配置"],
+  ["pcOutput", "pcOutputName", "输出目录"],
 ];
 function renderCollect(state){
   for(const [key, nameId] of PC_FIELDS){
@@ -1873,9 +1900,20 @@ function renderCollect(state){
     const v=state[key]||"";
     el.textContent=v?v.split(/[\/]/).pop():'未选择';
     el.classList.toggle('empty',!v);
-    el.title=v;
+    el.classList.toggle('link',!!v);
+    el.title=v?'点击打开：'+v:'';
   }
   renderPairList(state.periodPairs||[]);
+}
+/* 配对清单里的工作簿名精简：去掉代码/导出方式前缀段 */
+document.getElementById('pairList').addEventListener('click',e=>{
+  const book=e.target.closest('[data-open]');
+  if(book&&book.dataset.open){bridge.api.open_path(book.dataset.open)}
+});
+function shortPairBook(name){
+  const parts=String(name||'').replace(/\.xls$/i,'').split('#');
+  if(parts.length<2)return String(name||'');
+  return parts.slice(1).join(' · ');
 }
 function renderPairList(pairs){
   const box=document.getElementById('pairList');
@@ -1888,25 +1926,29 @@ function renderPairList(pairs){
   const both=pairs.filter(p=>p.side==='both').length;
   const missing=pairs.length-both;
   const head='<div class="pair-row" style="background:var(--surface-2)">'
-    +'<span class="pair-file" style="font-weight:600">机构（'+both+' 对齐全'+(missing?'，'+missing+' 项单边':'')+'）</span>'
-    +'<span></span><span style="font-weight:600;color:var(--text-2)">当期文件</span>'
-    +'<span class="pair-vs">比</span><span style="font-weight:600;color:var(--text-2)">上期文件</span></div>';
+    +'<span class="pair-target">对比对象（'+both+' 对齐全'+(missing?'，'+missing+' 项单边':'')+'）</span>'
+    +'<span style="font-weight:600;color:var(--text-2)">本期：工作簿 → 工作表</span>'
+    +'<span class="pair-vs">比</span><span style="font-weight:600;color:var(--text-2)">上期：工作簿 → 工作表</span></div>';
   box.innerHTML=head+pairs.map(r=>{
-    const cur=r.curName?'<span class="pair-file" title="'+esc(r.curPath)+'">'+esc(shortPairName(r.curName))+'</span>'
-      :'<span class="pair-file missing">— 缺失</span>';
-    const pre=r.preName?'<span class="pair-file" title="'+esc(r.prePath)+'">'+esc(shortPairName(r.preName))+'</span>'
-      :'<span class="pair-file missing">— 缺失</span>';
+    const org=r.orgName||r.org||'未识别机构';
+    const form=r.form||'未识别表单';
+    const target=org+' · '+form;
+    const curIdentity='本期-'+(r.curDate||'未识别日期')+'-'+org+'-'+form;
+    const preIdentity='上期-'+(r.preDate||'未识别日期')+'-'+org+'-'+form;
+    const cur=r.curName?'<span class="pair-source" title="点击打开：'+esc(r.curPath)+'"><span class="pair-source-name">'+esc(curIdentity)+'</span><span class="pair-source-book" data-open="'+esc(r.curPath)+'">工作簿：'+esc(shortPairBook(r.curName))+'</span><span class="pair-source-sheet">工作表：'+esc(r.curSheet||'未识别')+'</span></span>'
+      :'<span class="pair-source missing"><span class="pair-source-name">— 缺失</span></span>';
+    const pre=r.preName?'<span class="pair-source" title="点击打开：'+esc(r.prePath)+'"><span class="pair-source-name">'+esc(preIdentity)+'</span><span class="pair-source-book" data-open="'+esc(r.prePath)+'">工作簿：'+esc(shortPairBook(r.preName))+'</span><span class="pair-source-sheet">工作表：'+esc(r.preSheet||'未识别')+'</span></span>'
+      :'<span class="pair-source missing"><span class="pair-source-name">— 缺失</span></span>';
     return '<div class="pair-row">'
-      +'<span class="pair-org" title="'+esc(r.org)+'">'+esc(r.org)+'</span>'
-      +'<span class="pair-form">'+esc(r.form||'—')+'</span>'
+      +'<span class="pair-target" title="'+esc(target)+'">'+esc(target)+'</span>'
       +cur+'<span class="pair-vs">vs</span>'+pre
       +'</div>';
   }).join('');
 }
-function shortPairName(name){
-  /* 文件名形如 91441...#2026-06-30#01#20201#机构名.xls：抹去机构段更短 */
-  const parts=name.split('#');
-  return parts.length>=5?parts.slice(0,2).concat(parts.slice(3)).join('#'):name;
+function openPcPath(key){
+  const v=state?state[key]:'';
+  if(!v){return}
+  bridge.api.open_path(v);
 }
 async function pickPc(key){
   if(state&&state.busy)return;
@@ -1930,7 +1972,7 @@ function runPeriodCompare(){
   document.getElementById('confirmOk').textContent='开始比较';
   const central=state.pcCentral?'已选择，将一并与大集中核对':'未选择，将跳过大集中核对';
   document.getElementById('confirmMsg').textContent='将比较当期与上期报送数据（逐机构、逐指标），'+central+'。\n\n'
-    +'结果输出到“'+(state.output||'当期目录\\执行结果')+'”。原始报送文件不会被修改。\n\n'
+    +'结果输出到“'+(state.pcOutput||'当期目录\\执行结果')+'”。原始报送文件不会被修改。\n\n'
     +'请确认后再开始，比较期间请勿操作本页面。';
   document.getElementById('confirmMask').style.display='flex';
 }

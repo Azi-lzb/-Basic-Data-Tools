@@ -62,6 +62,14 @@ class UserSettings:
     recent_template_dirs: list[str] = field(default_factory=list)
     recent_external_files: list[str] = field(default_factory=list)
     recent_output_dirs: list[str] = field(default_factory=list)
+    # 报表采集系统（跨期比较）独立保存的最近路径，不与逐笔统计系统混用。
+    period_current_dir: str = ""
+    period_previous_dir: str = ""
+    period_central_file: str = ""
+    period_output_dir: str = ""
+    period_output_auto: bool = True
+    # 报表采集系统：跨期比较配置.xlsx 的绑定路径（空 = 使用程序目录内置配置）。
+    period_config_file: str = ""
 
 
 class SettingsStore:
@@ -122,6 +130,12 @@ class SettingsStore:
             recent_template_dirs=self._paths(payload.get("recent_template_dirs")),
             recent_external_files=self._paths(payload.get("recent_external_files")),
             recent_output_dirs=self._paths(payload.get("recent_output_dirs")),
+            period_current_dir=str(payload.get("period_current_dir") or ""),
+            period_previous_dir=str(payload.get("period_previous_dir") or ""),
+            period_central_file=str(payload.get("period_central_file") or ""),
+            period_output_dir=str(payload.get("period_output_dir") or ""),
+            period_output_auto=bool(payload.get("period_output_auto", True)),
+            period_config_file=str(payload.get("period_config_file") or ""),
         )
 
     def save(self, settings: UserSettings) -> None:
