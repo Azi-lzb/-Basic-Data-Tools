@@ -354,8 +354,8 @@ def test_cli_run_dispatches_to_native(tmp_path: Path, monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 def test_period_config_file_round_trip(tmp_path: Path) -> None:
-    stored = settings_mod.UserSettings(period_config_file="D:/配置/跨期比较配置.xlsx")
-    assert stored.period_config_file == "D:/配置/跨期比较配置.xlsx"
+    stored = settings_mod.UserSettings(period_config_file="D:/配置/报表采集系统_比较配置.xlsx")
+    assert stored.period_config_file == "D:/配置/报表采集系统_比较配置.xlsx"
 
 
 def test_choose_period_compare_binds_config(tmp_path: Path) -> None:
@@ -379,4 +379,40 @@ def test_choose_period_compare_binds_config(tmp_path: Path) -> None:
 def test_state_has_default_period_config(tmp_path: Path) -> None:
     from base_audit.web_app import WebApi
     api = WebApi(tmp_path)
-    assert api.state["pcConfig"] == str(tmp_path / "跨期比较配置.xlsx")
+    assert api.state["pcConfig"] == str(tmp_path / "报表采集系统_比较配置.xlsx")
+
+
+# ---------------------------------------------------------------------------
+# 配置文件改名迁移（历史：→逐笔统计系统_历史审核配置；比较：→报表采集系统_比较配置）
+# ---------------------------------------------------------------------------
+
+def test_legacy_history_workbook_migrates_to_prefixed_name(tmp_path: Path) -> None:
+    from base_audit.name_config import (
+        HISTORY_WORKBOOK_NAME, initialize_config,
+    )
+    legacy = tmp_path / "历史审核配置.xlsx"
+    from openpyxl import Workbook
+    book = Workbook(); book.active["A1"] = "旧历史数据"
+    book.save(legacy); book.close()
+    target = tmp_path / HISTORY_WORKBOOK_NAME
+    initialize_config(target)
+    assert target.is_file() and not legacy.exists()
+    restored = load_workbook(target, read_only=True)
+    assert restored[restored.sheetnames[0]]["A1"].value == "旧历史数据"
+    restored.close()
+
+
+def test_legacy_period_config_migrates_to_prefixed_name(tmp_path: Path) -> None:
+    from base_audit.period_compare import (
+        CONFIG_WORKBOOK_NAME, LEGACY_CONFIG_WORKBOOK_NAME, ensure_default_config,
+    )
+    legacy = tmp_path / LEGACY_CONFIG_WORKBOOK_NAME
+    book = Workbook(); book.active["A1"] = "用户自维护指标"
+    book.save(legacy); book.close()
+    target = tmp_path / CONFIG_WORKBOOK_NAME
+    created = ensure_default_config(target)
+    assert created is False  # 走的是迁移，不是新建
+    assert target.is_file() and not legacy.exists()
+    restored = load_workbook(target, read_only=True)
+    assert restored.active["A1"].value == "用户自维护指标"
+    restored.close()

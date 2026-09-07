@@ -220,7 +220,7 @@ class AuditService:
         from .name_config import load_flow_features
 
         if self.config_path is None:
-            raise ValueError("汇总功能需要历史审核配置.xlsx")
+            raise ValueError("汇总功能需要逐笔统计系统_历史审核配置.xlsx")
         flow_features = load_flow_features(self.config_path, flow_name) if flow_name else None
         if flow_name and not flow_features:
             raise ValueError(f"执行流程“{flow_name}”没有启用的功能")
@@ -396,7 +396,7 @@ class AuditService:
         ``strict`` 控制组合前置缺失时的处理：主流程(True)报错，自定义流程(False)只警告。
         """
         if self.config_path is None:
-            raise ValueError("按流程执行需要 data/历史审核配置.xlsx")
+            raise ValueError("按流程执行需要 data/逐笔统计系统_历史审核配置.xlsx")
         # 管线分派（engines 收口平台判断）：UOS/麒麟走原生管线，Windows 走 COM。
         from .engines import pipeline_kind
 

@@ -6,10 +6,14 @@
   2. 按报表划分：`banks#日期#01#表单.xls`，sheet 名=机构代码；
   3. 按机构划分：`reports#机构代码#日期#01#机构名.xls`，sheet=表单。
   数据工作表统一为：第 1 列指标编号、第 2 列指标名称、第 3 列值，第 4 行起。
-- 指标/机构/警戒区间配置放在独立工作簿 `跨期比较配置.xlsx`（用户维护、程序只读）。
+- 指标/机构/警戒区间/校验规则配置放在独立工作簿 `报表采集系统_比较配置.xlsx`
+  （用户维护、程序只读）。新格式为 4 表：指标参照、机构参照、警戒区间、
+  校验规则（表头名驱动读取）；旧 5 表格式（特殊指标-自定义、复杂校验-自定义）
+  自动识别并兼容。
 - 大集中核对：读用户选择的大集中工作簿（集中系统数据 + 参照表），按
-  机构代码→报表项目、指标代码→大集中指标名称映射，差异绝对值 > 0.01 万元
-  记“差异超过100元”，单边有值记“谨慎核实”。
+  机构代码→报表项目、指标代码→大集中指标名称映射，差异绝对值超过容差
+  （默认 0.01 万元，即 100 元，可在设置中心调整）记“差异超过100元”，
+  单边有值记“谨慎核实”。
 
 纯 openpyxl/xlrd 实现，不启动 Excel/WPS/LibreOffice，Windows 与 UOS 通用。
 """
@@ -35,7 +39,7 @@ INDICATOR_CODE_CODE = "20201002"     # 同上，机构代码
 
 PERIOD_SHEET_HEADERS = [
     "地区", "数据属性", "机构名称", "指标编码", "指标名称", "当期数", "上期数",
-    "变动绝对值", "环比变动", "备注", "是否说明", "计算过程", "机构类别", "承接行",
+    "变动绝对值", "环比变动", "备注", "是否说明", "级别", "计算过程", "机构类别", "承接行",
     "社会信用代码", "数据日期", "币种", "频度",
 ]
 CENTRAL_SHEET_HEADERS = [
@@ -43,12 +47,23 @@ CENTRAL_SHEET_HEADERS = [
     "大集中值", "差异绝对值", "差异幅度", "是否说明",
 ]
 
-CONFIG_WORKBOOK_NAME = "跨期比较配置.xlsx"
+CONFIG_WORKBOOK_NAME = "报表采集系统_比较配置.xlsx"
+LEGACY_CONFIG_WORKBOOK_NAME = "跨期比较配置.xlsx"
 CONFIG_INDICATOR_SHEET = "指标参照"
 CONFIG_ORG_SHEET = "机构参照"
 CONFIG_ALERT_SHEET = "警戒区间"
 CONFIG_SPECIAL_SHEET = "特殊指标-自定义"
 CONFIG_COMPLEX_SHEET = "复杂校验-自定义"
+CONFIG_RULE_SHEET = "校验规则"       # 新格式统一规则表；存在即按新格式读取
+
+# 统一校验规则的类型与级别（参考监管报表校验惯例：勾稽/阈值守恒用错误、
+# 监管线与占比阈值用核实、趋势与提示类用提示）。
+RULE_TYPE_EXPRESSION = "表达式"
+RULE_TYPE_ACC_YEAR = "累计不降(当年)"
+RULE_TYPE_ACC_HISTORY = "累计不降(历史)"
+RULE_TYPES = (RULE_TYPE_EXPRESSION, RULE_TYPE_ACC_YEAR, RULE_TYPE_ACC_HISTORY)
+RULE_LEVELS = ("错误", "核实", "提示")
+DEFAULT_RULE_LEVEL = "提示"
 
 
 class PeriodCompareError(RuntimeError):
@@ -114,11 +129,12 @@ class SpecialRule:
 
 @dataclass
 class ComplexRule:
-    """复杂校验表达式规则（对齐 VBA“复杂校验-自定义”）。
+    """复杂校验表达式规则（旧 5 表格式“复杂校验-自定义”，仅兼容保留）。
 
     表达式语法：`[机构,地区,类别,指标代码,数据属性,币种,频度,批次]` 为当期值，
-    `{...}` 同结构为上期值；第 4 段（下标 3）是指标代码。``Thd`` 占位符取
-    规则自带阈值。支持 Excel 风格 AND/OR/NOT 与 `<>` 运算符。
+    `{...}` 同结构为上期值，解析取第 4 段（下标 3）指标代码。新格式直接写
+    `[指标代码]`（当期）或 `{指标代码}`（上期），也可写指标名称如
+    `[一级资本净额]`。支持 Excel 风格 AND/OR/NOT（大小写均可）与 `<>`。
     """
 
     form: str
@@ -131,13 +147,62 @@ class ComplexRule:
 
 
 @dataclass
+class CheckRule:
+    """统一校验规则（新格式“校验规则”表的行）。
+
+    type 决定 content 的解释：
+    - ``表达式``：content 为条件表达式，真即命中；
+    - ``累计不降(当年)`` / ``累计不降(历史)``：content 为指标代码清单
+      （逗号/顿号/空白分隔），当期值低于上期值即命中；“当年”跨年跳过。
+    level 为命中后的“级别”列取值（错误/核实/提示）。
+    """
+
+    rule_id: str = ""
+    type: str = RULE_TYPE_EXPRESSION
+    desc: str = ""
+    content: str = ""
+    level: str = DEFAULT_RULE_LEVEL
+    disabled: bool = False
+    note: str = ""
+
+
+@dataclass
 class PeriodConfig:
     indicators: dict[str, IndicatorDef] = field(default_factory=dict)
     orgs: dict[str, OrgDef] = field(default_factory=dict)      # key=机构名称
     orgs_by_code: dict[str, OrgDef] = field(default_factory=dict)
     alerts: list[AlertRange] = field(default_factory=list)
-    specials: list[SpecialRule] = field(default_factory=list)
-    complex_rules: list[ComplexRule] = field(default_factory=list)
+    specials: list[SpecialRule] = field(default_factory=list)      # 旧格式
+    complex_rules: list[ComplexRule] = field(default_factory=list)  # 旧格式
+    rules: list[CheckRule] = field(default_factory=list)           # 新格式
+    # 加载期发现的问题（未知类型、非法级别、表达式语法错误、无法解析的
+    # 指标名称引用等）；由调用方写入运行日志，不再静默忽略。
+    warnings: list[str] = field(default_factory=list)
+
+    def effective_rules(self) -> list[CheckRule]:
+        """统一规则视图：新格式直接返回；旧格式把两张自定义表转换过来。"""
+        if self.rules:
+            return list(self.rules)
+        converted: list[CheckRule] = []
+        for item in self.specials:
+            if item.rule_kind == "当年累计不应减少":
+                rule_type = RULE_TYPE_ACC_YEAR
+            elif item.rule_kind == "历史累计不应减少":
+                rule_type = RULE_TYPE_ACC_HISTORY
+            else:
+                continue  # 未支持类型沿用旧行为：不执行
+            converted.append(CheckRule(
+                type=rule_type, desc=item.remark, content=item.code,
+                level=DEFAULT_RULE_LEVEL, disabled=item.disabled,
+            ))
+        for item in self.complex_rules:
+            if item.invert:
+                continue  # 取反规则（VBA qfbz）从未执行过，保持跳过
+            converted.append(CheckRule(
+                type=RULE_TYPE_EXPRESSION, desc=item.desc, content=item.rule,
+                level=DEFAULT_RULE_LEVEL, disabled=item.disabled, note=item.note,
+            ))
+        return converted
 
     def alert_remark(self, change_pct: float | None) -> str:
         """按 VBA AddbfMark 口径匹配警戒区间。
@@ -193,129 +258,361 @@ def _optional_float(value: Any) -> float | None:
         return None
 
 
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+# ---------------------------------------------------------------------------
+# 新格式（4 表，表头名驱动）读取
+# ---------------------------------------------------------------------------
+
+# 表头别名表：新表头与旧表头名映射到同一字段，列顺序不再影响读取。
+INDICATOR_HEADER_ALIASES = {
+    "指标代码": "code", "指标名称": "name", "数据属性": "data_type",
+    "不转换单位": "no_unit_convert", "是否不转换单位": "no_unit_convert",
+    "大集中核对": "check_central", "是否与大集中核对": "check_central",
+    "大集中指标名称": "central_name", "大集中报表查询指标名称": "central_name",
+    "禁用": "disabled", "备注": "note",
+}
+ORG_HEADER_ALIASES = {
+    "机构名称": "name", "社会信用代码": "code", "机构类别": "org_class",
+    "承接行": "bank_row", "地区": "region", "归属行": "region",
+    "报表项目": "report_item", "禁用": "disabled",
+}
+ALERT_HEADER_ALIASES = {
+    "变幅下限": "lower", "变幅下限（小数，0.3=30%）": "lower",
+    "备注": "remark", "整行填充": "fill_row", "是否整行填充": "fill_row",
+}
+RULE_HEADER_ALIASES = {
+    "规则编号": "rule_id", "类型": "type", "描述": "desc",
+    "规则内容": "content", "级别": "level", "禁用": "disabled", "备注": "note",
+}
+
+
+def _header_map(header_row: Iterable[Any], aliases: dict[str, str]) -> dict[str, int]:
+    """表头文字 → 列下标；未知表头忽略，同一字段取先出现的列。"""
+    result: dict[str, int] = {}
+    for index, value in enumerate(header_row):
+        field = aliases.get(str(value or "").strip())
+        if field and field not in result:
+            result[field] = index
+    return result
+
+
+def _cell(row: tuple[Any, ...], mapping: dict[str, int], field: str) -> Any:
+    index = mapping.get(field)
+    if index is None or index >= len(row):
+        return None
+    return row[index]
+
+
+def _sheet_rows(sheet, aliases: dict[str, str]) -> tuple[dict[str, int], list[tuple[Any, ...]]]:
+    rows = list(sheet.iter_rows(values_only=True))
+    if not rows:
+        return {}, []
+    return _header_map(rows[0], aliases), rows[1:]
+
+
+def _load_indicator_sheet(book, config: PeriodConfig) -> None:
+    if CONFIG_INDICATOR_SHEET not in book.sheetnames:
+        return
+    mapping, rows = _sheet_rows(book[CONFIG_INDICATOR_SHEET], INDICATOR_HEADER_ALIASES)
+    if "code" not in mapping:
+        config.warnings.append(f"“{CONFIG_INDICATOR_SHEET}”缺少“指标代码”表头，该表未加载")
+        return
+    for row in rows:
+        code = _norm_code(_cell(row, mapping, "code"))
+        if not code or _cell_bool(_cell(row, mapping, "disabled")):
+            continue
+        config.indicators[code] = IndicatorDef(
+            code=code,
+            name=_text(_cell(row, mapping, "name")),
+            data_type=_text(_cell(row, mapping, "data_type")),
+            no_unit_convert=_cell_bool(_cell(row, mapping, "no_unit_convert")),
+            check_central=_cell_bool(_cell(row, mapping, "check_central")),
+            central_name=_text(_cell(row, mapping, "central_name")),
+        )
+
+
+def _load_org_sheet(book, config: PeriodConfig) -> None:
+    if CONFIG_ORG_SHEET not in book.sheetnames:
+        return
+    mapping, rows = _sheet_rows(book[CONFIG_ORG_SHEET], ORG_HEADER_ALIASES)
+    if "name" not in mapping:
+        config.warnings.append(f"“{CONFIG_ORG_SHEET}”缺少“机构名称”表头，该表未加载")
+        return
+    for row in rows:
+        name = _text(_cell(row, mapping, "name"))
+        if not name or _cell_bool(_cell(row, mapping, "disabled")):
+            continue
+        org = OrgDef(
+            name=name,
+            code=_text(_cell(row, mapping, "code")),
+            org_class=_text(_cell(row, mapping, "org_class")),
+            bank_row=_text(_cell(row, mapping, "bank_row")),
+            region=_text(_cell(row, mapping, "region")),
+            report_item=_text(_cell(row, mapping, "report_item")),
+        )
+        config.orgs[name] = org
+        if org.code:
+            config.orgs_by_code[org.code] = org
+
+
+def _load_alert_sheet(book, config: PeriodConfig) -> None:
+    if CONFIG_ALERT_SHEET not in book.sheetnames:
+        return
+    mapping, rows = _sheet_rows(book[CONFIG_ALERT_SHEET], ALERT_HEADER_ALIASES)
+    if "lower" not in mapping:
+        config.warnings.append(f"“{CONFIG_ALERT_SHEET}”缺少“变幅下限”表头，该表未加载")
+        return
+    for row in rows:
+        try:
+            lower = float(_cell(row, mapping, "lower"))
+        except (TypeError, ValueError):
+            continue
+        config.alerts.append(AlertRange(
+            lower_bound=lower,
+            remark=_text(_cell(row, mapping, "remark")),
+            fill_row=_cell_bool(_cell(row, mapping, "fill_row")),
+        ))
+
+
+def _indicator_name_lookup(config: PeriodConfig) -> tuple[dict[str, str], list[str]]:
+    """指标名称 → 代码；重名名称从查找表中剔除（不可按名称引用）。"""
+    lookup: dict[str, str] = {}
+    duplicated: set[str] = set()
+    for code, indicator in config.indicators.items():
+        if not indicator.name:
+            continue
+        if indicator.name in lookup:
+            duplicated.add(indicator.name)
+        else:
+            lookup[indicator.name] = code
+    for name in duplicated:
+        lookup.pop(name, None)
+    return lookup, sorted(duplicated)
+
+
+def _load_rule_sheet(book, config: PeriodConfig) -> None:
+    if CONFIG_RULE_SHEET not in book.sheetnames:
+        return
+    mapping, rows = _sheet_rows(book[CONFIG_RULE_SHEET], RULE_HEADER_ALIASES)
+    if "content" not in mapping:
+        config.warnings.append(f"“{CONFIG_RULE_SHEET}”缺少“规则内容”表头，该表未加载")
+        return
+    for row in rows:
+        content = _text(_cell(row, mapping, "content"))
+        if not content:
+            continue
+        rule_id = _text(_cell(row, mapping, "rule_id"))
+        desc = _text(_cell(row, mapping, "desc"))
+        label = f"规则 {rule_id}（{desc or content[:24]}）" if rule_id else f"规则（{desc or content[:24]}）"
+        rule_type = _text(_cell(row, mapping, "type")) or RULE_TYPE_EXPRESSION
+        if rule_type not in RULE_TYPES:
+            config.warnings.append(f"{label}：未知类型“{rule_type}”（支持 {'、'.join(RULE_TYPES)}），已跳过")
+            continue
+        level = _text(_cell(row, mapping, "level")) or DEFAULT_RULE_LEVEL
+        if level not in RULE_LEVELS:
+            config.warnings.append(
+                f"{label}：级别“{level}”无效（应为 {'/'.join(RULE_LEVELS)}），按“{DEFAULT_RULE_LEVEL}”处理"
+            )
+            level = DEFAULT_RULE_LEVEL
+        config.rules.append(CheckRule(
+            rule_id=rule_id,
+            type=rule_type,
+            desc=desc or content,
+            content=content,
+            level=level,
+            disabled=_cell_bool(_cell(row, mapping, "disabled")),
+            note=_text(_cell(row, mapping, "note")),
+        ))
+    _validate_rules(config)
+
+
+def _validate_rules(config: PeriodConfig) -> None:
+    """加载期校验：名称引用核对 + 表达式全 0 试编译，问题写入 warnings。"""
+    lookup, duplicated = _indicator_name_lookup(config)
+
+    def resolver(name: str) -> str:
+        return lookup[name]
+
+    for name in duplicated:
+        config.warnings.append(f"指标名称“{name}”在指标参照中重复，校验规则中不能按名称引用它")
+    for rule in config.rules:
+        if rule.disabled or rule.type != RULE_TYPE_EXPRESSION:
+            continue
+        label = f"规则 {rule.rule_id}（{rule.desc}）" if rule.rule_id else f"规则（{rule.desc}）"
+        codes, errors = _expression_codes(rule.content, resolver)
+        for error in errors:
+            config.warnings.append(f"{label}：{error}")
+        for code in sorted(codes):
+            if code not in config.indicators:
+                config.warnings.append(f"{label}：引用的指标代码 {code} 不在指标参照中，请核实")
+        _filled, render_errors = _render_expression(
+            rule.content, lambda _code: 0.0, lambda _code: 0.0, resolver
+        )
+        if render_errors:
+            continue  # 名称/占位符问题已在上面记录
+        message = _compile_translated(_filled)
+        if message:
+            config.warnings.append(f"{label}：表达式语法错误（{message}），执行时将跳过")
+
+
 def load_period_config(config_path: Path) -> PeriodConfig:
     if not config_path.is_file():
         raise PeriodCompareError(
-            f"未找到跨期比较配置：{config_path}。请在程序目录放置{CONFIG_WORKBOOK_NAME}"
-            "（指标参照/机构参照/警戒区间），参照说明维护后重试。"
+            f"未找到比较配置：{config_path}。请在程序目录放置{CONFIG_WORKBOOK_NAME}"
+            "（指标参照/机构参照/警戒区间/校验规则），参照说明维护后重试。"
         )
     config = PeriodConfig()
     book = load_workbook(config_path, read_only=True, data_only=True)
     try:
-        if CONFIG_INDICATOR_SHEET in book.sheetnames:
-            for row in book[CONFIG_INDICATOR_SHEET].iter_rows(min_row=2, values_only=True):
-                code = _norm_code(row[0]) if row and row[0] is not None else ""
-                if not code or (len(row) > 6 and _cell_bool(row[6])):
-                    continue
-                config.indicators[code] = IndicatorDef(
-                    code=code,
-                    name=str(row[1] or "").strip() if len(row) > 1 else "",
-                    data_type=str(row[2] or "").strip() if len(row) > 2 else "",
-                    no_unit_convert=_cell_bool(row[3]) if len(row) > 3 else False,
-                    check_central=_cell_bool(row[4]) if len(row) > 4 else False,
-                    central_name=str(row[5] or "").strip() if len(row) > 5 else "",
-                )
-        if CONFIG_ORG_SHEET in book.sheetnames:
-            for row in book[CONFIG_ORG_SHEET].iter_rows(min_row=2, values_only=True):
-                name = str(row[0] or "").strip() if row and row[0] else ""
-                if not name or (len(row) > 6 and _cell_bool(row[6])):
-                    continue
-                org = OrgDef(
-                    name=name,
-                    code=str(row[1] or "").strip() if len(row) > 1 else "",
-                    org_class=str(row[2] or "").strip() if len(row) > 2 else "",
-                    bank_row=str(row[3] or "").strip() if len(row) > 3 else "",
-                    region=str(row[4] or "").strip() if len(row) > 4 else "",
-                    report_item=str(row[5] or "").strip() if len(row) > 5 else "",
-                )
-                config.orgs[name] = org
-                if org.code:
-                    config.orgs_by_code[org.code] = org
-        if CONFIG_ALERT_SHEET in book.sheetnames:
-            for row in book[CONFIG_ALERT_SHEET].iter_rows(min_row=2, values_only=True):
-                if not row or row[1] is None or row[1] == "":
-                    continue
-                try:
-                    lower = float(row[1])
-                except (TypeError, ValueError):
-                    continue
-                config.alerts.append(
-                    AlertRange(
-                        lower_bound=lower,
-                        remark=str(row[2]).strip() if row[2] is not None else "",
-                        fill_row=_cell_bool(row[3]) if len(row) > 3 else False,
-                    )
-                )
-        if CONFIG_SPECIAL_SHEET in book.sheetnames:
-            for row in book[CONFIG_SPECIAL_SHEET].iter_rows(min_row=2, values_only=True):
-                code = _norm_code(row[0]) if row and row[0] is not None else ""
-                remark = str(row[2] or "").strip() if len(row) > 2 else ""
-                if not code or not remark:
-                    continue
-                config.specials.append(SpecialRule(
-                    code=code,
-                    name=str(row[1] or "").strip(),
-                    remark=remark,
-                    rmb_threshold=_optional_float(row[3]) if len(row) > 3 else None,
-                    usd_threshold=_optional_float(row[4]) if len(row) > 4 else None,
-                    data_type=str(row[5] or "").strip() if len(row) > 5 else "",
-                    explain=_norm_code(row[6]) if len(row) > 6 else "",
-                    form=_norm_code(row[7]) if len(row) > 7 else "",
-                    detailed=str(row[8] or "").strip() if len(row) > 8 else "",
-                    change_pct=_optional_float(row[9]) if len(row) > 9 else None,
-                    disabled=_cell_bool(row[10]) if len(row) > 10 else False,
-                ))
-        if CONFIG_COMPLEX_SHEET in book.sheetnames:
-            for row in book[CONFIG_COMPLEX_SHEET].iter_rows(min_row=2, values_only=True):
-                rule = str(row[2] or "").strip() if len(row) > 2 else ""
-                desc = str(row[1] or "").strip() if len(row) > 1 else ""
-                if not rule or not desc:
-                    continue
-                config.complex_rules.append(ComplexRule(
-                    form=str(row[0] or "").strip(),
-                    desc=desc,
-                    rule=rule,
-                    invert=_cell_bool(row[3]) if len(row) > 3 else False,
-                    threshold=_optional_float(row[4]) if len(row) > 4 else None,
-                    disabled=_cell_bool(row[5]) if len(row) > 5 else False,
-                    note=str(row[6] or "").strip() if len(row) > 6 else "",
-                ))
+        if CONFIG_RULE_SHEET in book.sheetnames:
+            _load_indicator_sheet(book, config)
+            _load_org_sheet(book, config)
+            _load_alert_sheet(book, config)
+            _load_rule_sheet(book, config)
+        else:
+            _load_legacy_config(book, config)
     finally:
         book.close()
     config.alerts.sort(key=lambda item: item.lower_bound)
     return config
 
 
+def _load_legacy_config(book, config: PeriodConfig) -> None:
+    """旧 5 表格式：按列位置读取（用户手工绑定的旧配置簿继续可用）。"""
+    if CONFIG_INDICATOR_SHEET in book.sheetnames:
+        for row in book[CONFIG_INDICATOR_SHEET].iter_rows(min_row=2, values_only=True):
+            code = _norm_code(row[0]) if row and row[0] is not None else ""
+            if not code or (len(row) > 6 and _cell_bool(row[6])):
+                continue
+            config.indicators[code] = IndicatorDef(
+                code=code,
+                name=str(row[1] or "").strip() if len(row) > 1 else "",
+                data_type=str(row[2] or "").strip() if len(row) > 2 else "",
+                no_unit_convert=_cell_bool(row[3]) if len(row) > 3 else False,
+                check_central=_cell_bool(row[4]) if len(row) > 4 else False,
+                central_name=str(row[5] or "").strip() if len(row) > 5 else "",
+            )
+    if CONFIG_ORG_SHEET in book.sheetnames:
+        for row in book[CONFIG_ORG_SHEET].iter_rows(min_row=2, values_only=True):
+            name = str(row[0] or "").strip() if row and row[0] else ""
+            if not name or (len(row) > 6 and _cell_bool(row[6])):
+                continue
+            org = OrgDef(
+                name=name,
+                code=str(row[1] or "").strip() if len(row) > 1 else "",
+                org_class=str(row[2] or "").strip() if len(row) > 2 else "",
+                bank_row=str(row[3] or "").strip() if len(row) > 3 else "",
+                region=str(row[4] or "").strip() if len(row) > 4 else "",
+                report_item=str(row[5] or "").strip() if len(row) > 5 else "",
+            )
+            config.orgs[name] = org
+            if org.code:
+                config.orgs_by_code[org.code] = org
+    if CONFIG_ALERT_SHEET in book.sheetnames:
+        for row in book[CONFIG_ALERT_SHEET].iter_rows(min_row=2, values_only=True):
+            if not row or row[1] is None or row[1] == "":
+                continue
+            try:
+                lower = float(row[1])
+            except (TypeError, ValueError):
+                continue
+            config.alerts.append(
+                AlertRange(
+                    lower_bound=lower,
+                    remark=str(row[2]).strip() if row[2] is not None else "",
+                    fill_row=_cell_bool(row[3]) if len(row) > 3 else False,
+                )
+            )
+    if CONFIG_SPECIAL_SHEET in book.sheetnames:
+        for row in book[CONFIG_SPECIAL_SHEET].iter_rows(min_row=2, values_only=True):
+            code = _norm_code(row[0]) if row and row[0] is not None else ""
+            remark = str(row[2] or "").strip() if len(row) > 2 else ""
+            if not code or not remark:
+                continue
+            config.specials.append(SpecialRule(
+                code=code,
+                name=str(row[1] or "").strip(),
+                remark=remark,
+                rmb_threshold=_optional_float(row[3]) if len(row) > 3 else None,
+                usd_threshold=_optional_float(row[4]) if len(row) > 4 else None,
+                data_type=str(row[5] or "").strip() if len(row) > 5 else "",
+                explain=_norm_code(row[6]) if len(row) > 6 else "",
+                form=_norm_code(row[7]) if len(row) > 7 else "",
+                detailed=str(row[8] or "").strip() if len(row) > 8 else "",
+                change_pct=_optional_float(row[9]) if len(row) > 9 else None,
+                disabled=_cell_bool(row[10]) if len(row) > 10 else False,
+            ))
+    if CONFIG_COMPLEX_SHEET in book.sheetnames:
+        for row in book[CONFIG_COMPLEX_SHEET].iter_rows(min_row=2, values_only=True):
+            rule = str(row[2] or "").strip() if len(row) > 2 else ""
+            desc = str(row[1] or "").strip() if len(row) > 1 else ""
+            if not rule or not desc:
+                continue
+            config.complex_rules.append(ComplexRule(
+                form=str(row[0] or "").strip(),
+                desc=desc,
+                rule=rule,
+                invert=_cell_bool(row[3]) if len(row) > 3 else False,
+                threshold=_optional_float(row[4]) if len(row) > 4 else None,
+                disabled=_cell_bool(row[5]) if len(row) > 5 else False,
+                note=str(row[6] or "").strip() if len(row) > 6 else "",
+            ))
+
+
 def ensure_default_config(config_path: Path) -> bool:
-    """配置簿缺失时生成一份带默认警戒区间的模板；返回是否新建。"""
+    """配置簿缺失时生成新版 4 表模板（含禁用状态的示例规则）；返回是否新建。
+
+    旧文件名「跨期比较配置.xlsx」若与目标同目录存在，则直接改名沿用，
+    用户自维护内容不丢失。
+    """
     if config_path.is_file():
         return False
+    legacy = config_path.with_name(LEGACY_CONFIG_WORKBOOK_NAME)
+    if legacy.is_file():
+        try:
+            legacy.replace(config_path)
+            return False
+        except PermissionError:
+            pass  # 旧文件被占用时退回生成默认配置，不影响执行
     book = Workbook()
     sheet = book.active
     sheet.title = CONFIG_INDICATOR_SHEET
-    sheet.append(["指标代码", "指标名称", "数据属性", "是否不转换单位", "是否与大集中核对", "大集中报表查询指标名称", "禁用"])
+    sheet.append(["指标代码", "指标名称", "数据属性", "不转换单位", "大集中核对", "大集中指标名称", "禁用", "备注"])
     org_sheet = book.create_sheet(CONFIG_ORG_SHEET)
-    org_sheet.append(["机构名称", "社会信用代码", "机构类别", "承接行", "归属行", "报表项目", "禁用"])
+    org_sheet.append(["机构名称", "社会信用代码", "机构类别", "承接行", "地区", "报表项目", "禁用"])
     alert_sheet = book.create_sheet(CONFIG_ALERT_SHEET)
-    alert_sheet.append(["序号", "变幅下限（小数，0.3=30%）", "备注", "是否整行填充"])
+    alert_sheet.append(["变幅下限（小数，0.3=30%）", "备注", "整行填充"])
     default_alerts = [
-        (1, -0.96, "降幅(-96%,-90%],缩小10倍-100倍", "是"),
-        (2, -0.9, "降幅(-90%,-80%],缩小5倍-10倍", ""),
-        (3, -0.8, "降幅(-80%,-50%],缩小1倍-5倍", ""),
-        (4, -0.5, "降幅(-50%,-30%],缩小1倍以内", ""),
-        (5, -0.3, "", ""),
-        (6, 0.0, "", ""),
-        (7, 0.3, "增幅[30%,50%)", ""),
-        (8, 0.5, "增幅[50%,1倍)", ""),
-        (9, 1.0, "增幅[1倍,5倍)", ""),
-        (10, 5.0, "增幅[5倍,10倍)", ""),
-        (11, 10.0, "增幅[10倍,96倍)", "是"),
-        (12, 96.0, "近增幅100倍以上，请核实", "是"),
+        (-0.96, "降幅(-96%,-90%],缩小10倍-100倍", "是"),
+        (-0.9, "降幅(-90%,-80%],缩小5倍-10倍", ""),
+        (-0.8, "降幅(-80%,-50%],缩小1倍-5倍", ""),
+        (-0.5, "降幅(-50%,-30%],缩小1倍以内", ""),
+        (-0.3, "", ""),
+        (0.0, "", ""),
+        (0.3, "增幅[30%,50%)", ""),
+        (0.5, "增幅[50%,1倍)", ""),
+        (1.0, "增幅[1倍,5倍)", ""),
+        (5.0, "增幅[5倍,10倍)", ""),
+        (10.0, "增幅[10倍,96倍)", "是"),
+        (96.0, "近增幅100倍以上，请核实", "是"),
     ]
     for row in default_alerts:
         alert_sheet.append(row)
-    book.create_sheet("特殊指标-自定义")   # 二期迁移预留
-    book.create_sheet("复杂校验-自定义")   # 二期迁移预留
+    rule_sheet = book.create_sheet(CONFIG_RULE_SHEET)
+    rule_sheet.append(["规则编号", "类型", "描述", "规则内容", "级别", "禁用", "备注"])
+    rule_sheet.append([
+        "R001", RULE_TYPE_EXPRESSION, "示例：资产负债表不平衡",
+        "[20202003] <> [20202004] + [20202005]", "错误", "是",
+        "示例行：确认公式后把“禁用”清空即可启用；[代码]为当期值，{代码}为上期值，也可写指标名称",
+    ])
+    rule_sheet.append([
+        "R002", RULE_TYPE_ACC_YEAR, "当年累计指标比上期不应减少。",
+        "20203003", "提示", "是",
+        "示例行：规则内容填指标代码清单，可用逗号/顿号分隔多个代码",
+    ])
     config_path.parent.mkdir(parents=True, exist_ok=True)
     book.save(config_path)
     return True
@@ -658,6 +955,7 @@ def compare_periods(
             "数据日期": (cur.date if cur else pre.date if pre else ""),
             "币种": "人民币",
             "是否说明": "",
+            "级别": "",
             "计算过程": "",
             "频度": "季",
         })
@@ -758,6 +1056,8 @@ def compare_central(
     current: dict[tuple[str, str], IndicatorValue],
     central_path: Path,
     config: PeriodConfig,
+    *,
+    tolerance: float = CENTRAL_DIFF_TOLERANCE,
 ) -> list[dict[str, Any]]:
     matrix, _headers = _load_central_matrix(central_path)
     org_map = _load_central_org_map(central_path)
@@ -785,7 +1085,7 @@ def compare_central(
         else:
             difference = abs(base_num - central_value)
             ratio = (difference / abs(base_num) * 100.0) if base_num else None
-            note = "差异超过100元" if difference > CENTRAL_DIFF_TOLERANCE else ""
+            note = "差异超过100元" if difference > tolerance else ""
         rows.append({
             "地区": org.region if org else "",
             "数据属性": indicator.data_type,
@@ -813,6 +1113,11 @@ def _period_month(date_text: str) -> tuple[int, int] | None:
     return int(match.group(1)), int(match.group(2))
 
 
+def _split_code_list(content: str) -> list[str]:
+    """指标代码清单 → 代码列表；支持逗号/顿号/分号/空白分隔。"""
+    return [item for item in re.split(r"[,，、;；\s]+", content.strip()) if item]
+
+
 def apply_special_rules(
     rows: list[dict[str, Any]],
     current: dict[tuple[str, str], IndicatorValue],
@@ -821,52 +1126,52 @@ def apply_special_rules(
     *,
     on_step: Callable[[str], None] | None = None,
 ) -> None:
-    """执行特殊指标规则，命中行写“是否说明”。
+    """执行“累计不降”类规则，命中行写“是否说明+级别”。
 
-    第一期支持“当年累计/历史累计指标比上期不应减少”：当期值 < 上期值
-    （均换算为万元后）即命中。“当年累计”仅在同一年度内比较（跨年累计
-    不可比，跳过并写计算过程说明）；“历史累计”跨年也可比。
-    其余 VBA 规则类型读取保留但跳过。
+    当期值 < 上期值（均换算为万元后）即命中。“累计不降(当年)”仅在同一年度
+    内比较（跨年累计不可比，跳过并写计算过程说明）；“累计不降(历史)”跨年
+    也可比。旧“特殊指标-自定义”表的规则经 ``effective_rules`` 转换后在此统一执行。
     """
     step = on_step or (lambda _text: None)
-    rules = [r for r in config.specials if not r.disabled]
+    rules = [
+        r for r in config.effective_rules()
+        if not r.disabled and r.type in (RULE_TYPE_ACC_YEAR, RULE_TYPE_ACC_HISTORY)
+    ]
     if not rules:
         return
-    supported = [r for r in rules if r.rule_kind in {"当年累计不应减少", "历史累计不应减少"}]
-    skipped_kinds = sorted({r.rule_kind for r in rules if r.rule_kind not in {"当年累计不应减少", "历史累计不应减少"}})
-    if skipped_kinds:
-        step(f"特殊指标：{len(supported)} 条执行，跳过未支持类型（{len(rules) - len(supported)} 条）")
-    else:
-        step(f"特殊指标：执行 {len(supported)} 条")
+    step(f"累计不降校验：执行 {len(rules)} 条规则")
     cur_years = {_period_month(record.date) for record in current.values()}
     pre_years = {_period_month(record.date) for record in previous.values()}
     cur_year = next(iter({y[0] for y in cur_years if y}), None)
     pre_year = next(iter({y[0] for y in pre_years if y}), None)
     row_map = {(row["机构名称"], row["指标编码"]): row for row in rows}
     hits = 0
-    for rule in supported:
-        for org_name in {name for name, _code in row_map}:
-            row = row_map.get((org_name, rule.code))
-            if row is None:
-                continue
-            cur = current.get((org_name, rule.code))
-            pre = previous.get((org_name, rule.code))
-            cur_num = _numeric(_apply_unit(cur.value, config.indicators.get(rule.code))) if cur else None
-            pre_num = _numeric(_apply_unit(pre.value, config.indicators.get(rule.code))) if pre else None
-            if cur_num is None or pre_num is None:
-                continue
-            same_year = cur_year is not None and cur_year == pre_year
-            if rule.rule_kind == "当年累计不应减少" and not same_year:
-                row["计算过程"] = (
-                    f"跨年累计不比较（当期 {cur.date} / 上期 {pre.date}）"
-                    if row.get("计算过程") in (None, "")
-                    else row["计算过程"]
-                )
-                continue
-            if cur_num < pre_num:
-                row["是否说明"] = rule.remark
-                hits += 1
-    step(f"特殊指标命中 {hits} 行")
+    for rule in rules:
+        for code in _split_code_list(rule.content):
+            indicator = config.indicators.get(code)
+            for org_name in {name for name, _code in row_map}:
+                row = row_map.get((org_name, code))
+                if row is None:
+                    continue
+                cur = current.get((org_name, code))
+                pre = previous.get((org_name, code))
+                cur_num = _numeric(_apply_unit(cur.value, indicator)) if cur else None
+                pre_num = _numeric(_apply_unit(pre.value, indicator)) if pre else None
+                if cur_num is None or pre_num is None:
+                    continue
+                same_year = cur_year is not None and cur_year == pre_year
+                if rule.type == RULE_TYPE_ACC_YEAR and not same_year:
+                    row["计算过程"] = (
+                        f"跨年累计不比较（当期 {cur.date} / 上期 {pre.date}）"
+                        if row.get("计算过程") in (None, "")
+                        else row["计算过程"]
+                    )
+                    continue
+                if cur_num < pre_num:
+                    row["是否说明"] = rule.desc
+                    row["级别"] = rule.level
+                    hits += 1
+    step(f"累计不降校验命中 {hits} 行")
 
 
 _PLACEHOLDER = re.compile(r"(\[|\{)([^\]}]*)(\]|\})")
@@ -934,36 +1239,132 @@ def _NOT(value) -> bool:
     return not bool(value)
 
 
-def _eval_complex_expression(
+def _placeholder_code(inner: str, resolver: Callable[[str], str]) -> tuple[str, str]:
+    """占位符内文 → (指标代码, 错误说明)。
+
+    兼容三种写法：旧 8 段 `[机构,地区,类别,代码,…]` 取下标 3；新短写
+    `[代码]`；指标名称 `[一级资本净额]`（经指标参照解析，重名/未知即报错）。
+    """
+    if "," in inner:
+        parts = [p.strip() for p in inner.split(",")]
+        return (parts[3] if len(parts) > 3 else ""), ""
+    code = inner.strip()
+    if not code:
+        return "", "存在空占位符 []"
+    if code.isdigit():
+        return code, ""
+    try:
+        return resolver(code), ""
+    except KeyError:
+        return "", f"引用的指标名称“{code}”在指标参照中不存在（或重名）"
+
+
+def _expression_codes(
+    expression: str, resolver: Callable[[str], str]
+) -> tuple[set[str], list[str]]:
+    """提取表达式引用的全部指标代码，附带解析错误列表。"""
+    codes: set[str] = set()
+    errors: list[str] = []
+    for match in _PLACEHOLDER.finditer(expression):
+        code, error = _placeholder_code(match.group(2), resolver)
+        if code:
+            codes.add(code)
+        if error:
+            errors.append(error)
+    return codes, errors
+
+
+def _render_expression(
     expression: str,
     cur_lookup: Callable[[str], float],
     pre_lookup: Callable[[str], float],
-) -> tuple[bool, str]:
-    """求值一条复杂校验表达式，返回 (是否命中, 代入后的表达式)。
+    resolver: Callable[[str], str],
+) -> tuple[str, list[str]]:
+    """把占位符替换为 ``_V(数值)``，返回（代入后的表达式, 错误列表）。
 
-    `[...]` 占位符取当期值、`{...}` 取上期值，均按第 4 段指标代码取该机构
-    的值；缺省指标记 0，值为 0 时按 VBA 口径替换为 0.01（避免除零）。
-    数值四舍五入两位（VBA RoundRule）。Excel 风格 AND/OR/NOT 与 `<>` 转
-    成 Python 求值；表达式来自用户自己的配置簿，与 VBA Evaluate 等价。
+    缺省指标记 0，值为 0 时按 VBA 口径替换为 0.01（避免除零）；
+    数值四舍五入两位（万元，VBA RoundRule）。
     """
+    errors: list[str] = []
 
     def replace(match: re.Match) -> str:
-        parts = [p.strip() for p in match.group(2).split(",")]
-        code = parts[3] if len(parts) > 3 else ""
+        code, error = _placeholder_code(match.group(2), resolver)
+        if error:
+            errors.append(error)
+            code = ""
         lookup = cur_lookup if match.group(1) == "[" else pre_lookup
-        value = lookup(code)
+        value = lookup(code) if code else 0.0
         return f"_V({0.01 if value == 0 else round(value, 2)!r})"
 
-    filled = _PLACEHOLDER.sub(replace, expression)
-    eval_text = filled.replace("<>", "!=")                          # Excel 不等号
-    eval_text = re.sub(r"(?<![<>!])=(?!=)", "==", eval_text)        # 单独 = 为相等比较
-    for excel, py in (("AND", "_AND"), ("OR", "_OR"), ("NOT", "_NOT")):
-        eval_text = re.sub(rf"\b{excel}\b", py, eval_text)
-    try:
-        result = eval(eval_text, {"__builtins__": {}}, {"_AND": _AND, "_OR": _OR, "_NOT": _NOT, "_V": _V})  # noqa: S307 - 用户配置簿内的受控表达式
-        return bool(result), filled
-    except Exception:
-        return False, filled
+    return _PLACEHOLDER.sub(replace, expression), errors
+
+
+def _translate_for_eval(filled: str) -> str:
+    """Excel 风格运算符/函数 → Python：`<>`、单独 `=`、大写 AND/OR/NOT。"""
+    text = filled.replace("<>", "!=")                          # Excel 不等号
+    text = re.sub(r"(?<![<>!])=(?!=)", "==", text)             # 单独 = 为相等比较
+    text = re.sub(r"\b(AND|OR|NOT)\b", lambda m: "_" + m.group(1), text)
+    return text
+
+
+def _translate_function_calls(text: str) -> str:
+    """二次尝试：小写 and/or/not 的函数式写法（如 ``or(a,b)``）转为 _OR(a,b)。
+
+    仅当首次求值出现语法错误时使用；裸关键字 ``a and b`` 是合法 Python，
+    不会走到这里。
+    """
+    return re.sub(
+        r"\b(and|or|not)\s*\(",
+        lambda m: "_" + m.group(1).upper() + "(",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+
+def _compile_translated(filled: str) -> str:
+    """试编译代入后的表达式，返回错误说明（可执行返回空串）。
+
+    与运行时求值保持同一套两步尝试：先按主转换，语法不过再试函数式
+    小写转换，避免把 ``or(a,b)`` 这类 Excel 习惯写法误报为语法错误。
+    """
+    primary = _translate_for_eval(filled)
+    message = ""
+    for eval_text in (primary, _translate_function_calls(primary)):
+        try:
+            compile(eval_text, "<校验规则>", "eval")
+            return ""
+        except SyntaxError as exc:
+            message = exc.msg or "表达式语法无法识别"
+    return message
+
+
+_EVAL_NAMES = {"_AND": _AND, "_OR": _OR, "_NOT": _NOT, "_V": _V}
+
+
+def _eval_expression(
+    expression: str,
+    cur_lookup: Callable[[str], float],
+    pre_lookup: Callable[[str], float],
+    resolver: Callable[[str], str],
+) -> tuple[bool, str, str]:
+    """求值一条校验表达式，返回 (是否命中, 代入后的表达式, 错误说明)。
+
+    表达式来自用户自己的配置簿，在空 builtins 沙箱中受限求值；
+    语法/引用错误不再静默吞掉，而是随错误说明写入运行日志。
+    """
+    filled, errors = _render_expression(expression, cur_lookup, pre_lookup, resolver)
+    if errors:
+        return False, filled, errors[0]
+    primary = _translate_for_eval(filled)
+    for eval_text in (primary, _translate_function_calls(primary)):
+        try:
+            result = eval(eval_text, {"__builtins__": {}}, dict(_EVAL_NAMES))  # noqa: S307 - 用户配置簿内的受控表达式
+            return bool(result), filled, ""
+        except SyntaxError:
+            continue
+        except Exception as exc:
+            return False, filled, f"表达式无法求值：{exc}"
+    return False, filled, "表达式语法无法识别"
 
 
 def apply_complex_rules(
@@ -974,20 +1375,24 @@ def apply_complex_rules(
     *,
     on_step: Callable[[str], None] | None = None,
 ) -> None:
-    """执行复杂校验表达式：逐机构代入指标值，命中行写“是否说明+计算过程”。
+    """执行“表达式”类校验规则：逐机构代入指标值，命中行写“是否说明+级别+计算过程”。
 
-    取反标识（VBA qfbz）规则第一期跳过（保留数据，日志注明）。
+    旧“复杂校验-自定义”表经 ``effective_rules`` 转换后在此统一执行；
+    表达式无法求值的规则记入运行日志，不再静默跳过。
     """
     step = on_step or (lambda _text: None)
-    rules = [r for r in config.complex_rules if not r.disabled]
-    inverted = sum(1 for r in rules if r.invert)
-    forward = len(rules) - inverted
+    rules = [
+        r for r in config.effective_rules()
+        if not r.disabled and r.type == RULE_TYPE_EXPRESSION
+    ]
     if not rules:
         return
-    if inverted:
-        step(f"复杂校验：执行 {forward} 条（跳过 {inverted} 条取反规则）")
-    else:
-        step(f"复杂校验：执行 {forward} 条")
+    step(f"表达式校验：执行 {len(rules)} 条")
+
+    lookup, _duplicated = _indicator_name_lookup(config)
+
+    def resolver(name: str) -> str:
+        return lookup[name]
 
     def values_by_org(values: dict[tuple[str, str], IndicatorValue]) -> dict[str, dict[str, float]]:
         result: dict[str, dict[str, float]] = {}
@@ -1002,34 +1407,39 @@ def apply_complex_rules(
     pre_by_org = values_by_org(previous)
     row_map = {(row["机构名称"], row["指标编码"]): row for row in rows}
     hit_rules = 0
+    rule_errors: dict[str, str] = {}
     for rule in rules:
-        if rule.invert:
-            continue
-        involved_codes = {
-            parts[3].strip()
-            for parts in (m.group(2).split(",") for m in _PLACEHOLDER.finditer(rule.rule))
-            if len(parts) > 3 and parts[3].strip()
-        }
+        label = rule.desc
+        involved_codes, code_errors = _expression_codes(rule.content, resolver)
+        for error in code_errors:
+            rule_errors.setdefault(label, error)
         rule_hit_any_org = False
         for org in sorted(set(cur_by_org) | set(pre_by_org)):
             cur_vals = cur_by_org.get(org, {})
             pre_vals = pre_by_org.get(org, {})
-            hit, filled = _eval_complex_expression(
-                rule.rule,
+            hit, filled, error = _eval_expression(
+                rule.content,
                 lambda code, _v=cur_vals: _v.get(code, 0.0),
                 lambda code, _v=pre_vals: _v.get(code, 0.0),
+                resolver,
             )
+            if error:
+                rule_errors.setdefault(label, error)
             if not hit:
                 continue
             rule_hit_any_org = True
+            reference = f"校验规则 {rule.rule_id} 命中" if rule.rule_id else "复杂校验命中"
             for code in involved_codes:
                 row = row_map.get((org, code))
                 if row is not None and not row.get("是否说明"):
                     row["是否说明"] = rule.desc
-                    row["计算过程"] = f"复杂校验命中：{filled}"
+                    row["级别"] = rule.level
+                    row["计算过程"] = f"{reference}：{filled}"
         if rule_hit_any_org:
             hit_rules += 1
-    step(f"复杂校验命中 {hit_rules} 条规则")
+    for label, error in rule_errors.items():
+        step(f"表达式校验：规则“{label}”无法执行，已跳过（{error}）")
+    step(f"表达式校验命中 {hit_rules} 条规则")
 
 
 
@@ -1041,11 +1451,11 @@ def write_output(
 ) -> None:
     book = Workbook()
     sheet = book.active
-    sheet.title = "跨期比较"
+    sheet.title = "两期对比"
     sheet.append(PERIOD_SHEET_HEADERS)
     for row in period_rows:
         sheet.append([row.get(header, "") for header in PERIOD_SHEET_HEADERS])
-    central_sheet = book.create_sheet("大集中比较")
+    central_sheet = book.create_sheet("大集中对比")
     central_sheet.append(CENTRAL_SHEET_HEADERS)
     for row in central_rows:
         central_sheet.append([row.get(header, "") for header in CENTRAL_SHEET_HEADERS])
@@ -1063,12 +1473,25 @@ def run_period_compare(
     central_path: Path | None,
     output_dir: Path,
     config_path: Path,
+    central_tolerance_yuan: float | None = None,
     on_step: Callable[[str], None] | None = None,
 ) -> Path:
-    """执行跨期比较并输出工作簿；返回输出文件路径。"""
+    """执行跨期比较并输出工作簿；返回输出文件路径。
+
+    ``central_tolerance_yuan`` 为大集中核对差异容差（元，来自设置中心）；
+    缺省用内置口径 100 元（0.01 万元）。
+    """
     step = on_step or (lambda _text: None)
     config = load_period_config(config_path)
     step(f"已加载配置：指标 {len(config.indicators)} 项，机构 {len(config.orgs)} 家，警戒区间 {len(config.alerts)} 档")
+    for warning in config.warnings:
+        step(f"配置提醒：{warning}")
+    tolerance = CENTRAL_DIFF_TOLERANCE
+    if central_tolerance_yuan is not None:
+        try:
+            tolerance = max(float(central_tolerance_yuan), 0.0) / 10000.0
+        except (TypeError, ValueError):
+            step(f"配置提醒：大集中核对容差“{central_tolerance_yuan}”无效，按默认 100 元处理")
     current = load_period_directory(current_dir, label="当期", on_step=step)
     previous = load_period_directory(previous_dir, label="上期", on_step=step)
     step(f"当期指标值 {len(current)} 条，上期指标值 {len(previous)} 条")
@@ -1078,10 +1501,10 @@ def run_period_compare(
     apply_complex_rules(period_rows, current, previous, config, on_step=step)
     central_rows: list[dict[str, Any]] = []
     if central_path is not None:
-        central_rows = compare_central(current, central_path, config)
+        central_rows = compare_central(current, central_path, config, tolerance=tolerance)
         flagged = sum(1 for row in central_rows if row["是否说明"])
         step(f"大集中核对完成：{len(central_rows)} 行，其中 {flagged} 行需要说明")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = output_dir / f"跨期比较_{timestamp}.xlsx"
+    output_path = output_dir / f"报表采集系统_比较结果_{timestamp}.xlsx"
     write_output(output_path, period_rows, central_rows)
     return output_path

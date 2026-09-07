@@ -56,6 +56,197 @@ def _make_central(path: Path, *, value_yi=0.2831236):
     book.save(path)
 
 
+def _make_config_v2(path: Path):
+    """新版 4 表配置：表头名驱动、短写/名称引用表达式、级别、代码清单规则。
+
+    列顺序故意与旧格式不同，且包含未知类型/非法级别/语法错误/未知名称等
+    异常行，用于同时验证加载期校验。
+    """
+    book = Workbook()
+    sheet = book.active
+    sheet.title = pc.CONFIG_INDICATOR_SHEET
+    sheet.append(["禁用", "指标代码", "指标名称", "数据属性", "不转换单位", "大集中核对", "大集中指标名称", "备注"])
+    sheet.append([None, 20201001, "金融机构名称", "文字", None, None, None])
+    sheet.append([None, 20202001, "各项存款", "余额", None, "是", "各项存款"])
+    sheet.append([None, 20202002, "各项贷款", "余额", None, None, None])
+    sheet.append([None, 20202003, "资产总计", "余额", None, None, None])
+    sheet.append([None, 20202004, "负债合计", "余额", None, None, None])
+    sheet.append([None, 20202005, "所有者权益", "余额", None, None, None])
+    sheet.append([None, 20202006, "备用指标", "余额", None, None, None])
+    sheet.append([None, 20202007, "备用指标", "余额", None, None, None])   # 重名 → 名称引用禁用
+    org = book.create_sheet(pc.CONFIG_ORG_SHEET)
+    org.append(["机构名称", "社会信用代码", "机构类别", "承接行", "地区", "报表项目", "禁用"])
+    org.append(["甲银行", "91440000AA", "农商行", "承接一部", "惠州", "j01（甲银行）"])
+    alert = book.create_sheet(pc.CONFIG_ALERT_SHEET)
+    alert.append(["变幅下限（小数，0.3=30%）", "备注", "整行填充"])
+    alert.append([-0.3, "", None])
+    alert.append([0.3, "增幅[30%,50%)", "是"])
+    rules = book.create_sheet(pc.CONFIG_RULE_SHEET)
+    rules.append(["规则编号", "类型", "描述", "规则内容", "级别", "禁用", "备注"])
+    rules.append(["R001", "累计不降(当年)", "当年累计指标比上期不应减少。", "20202002,20202003", "提示", None, None])
+    rules.append(["R002", "表达式", "资产负债表不平衡", "[资产总计] <> [负债合计] + [所有者权益]", "错误", None, None])
+    rules.append(["R003", "表达式", "贷款大于存款", "or([各项贷款] > [各项存款] , [各项贷款] > 99999)", "核实", None, None])
+    rules.append(["R004", "表达式", "禁用规则不执行", "[20202001] > 0", "提示", "是", None])
+    rules.append(["R005", "未支持类型", "未知类型应跳过", "[20202001] > 0", "提示", None, None])
+    rules.append(["R006", "表达式", "级别无效按提示", "[20202001] > 0", "严重", None, None])
+    rules.append(["R007", "表达式", "语法错误进告警", "[20202001] >", "错误", None, None])
+    rules.append(["R008", "表达式", "未知名称进告警", "[不存在的指标] > 0", "错误", None, None])
+    book.save(path)
+
+
+class PeriodCompareV2ConfigTests(unittest.TestCase):
+    """新版（4 表、表头名驱动）配置簿的加载、校验与规则执行。"""
+
+    def setUp(self):
+        import tempfile
+
+        self.tmp = Path(tempfile.mkdtemp())
+        self.config_path = self.tmp / "config_v2.xlsx"
+        _make_config_v2(self.config_path)
+        self.config = pc.load_period_config(self.config_path)
+
+    def _prepare_periods(self):
+        """两期数据：贷款下降（累计不降命中）、资产负债不平衡（表达式命中）。"""
+        cur_dir = self.tmp / "v2_cur"
+        pre_dir = self.tmp / "v2_pre"
+        cur_dir.mkdir()
+        pre_dir.mkdir()
+        common_head = [
+            [20201001, "金融机构名称", "甲银行"],
+            [20201002, "金融机构代码", "91440000AA"],
+        ]
+        rows_cur = common_head + [
+            [20202001, "各项存款", 500_000],     # 50 万元
+            [20202002, "各项贷款", 800_000],     # 80 万元（上期 100 万 → 下降命中）
+            [20202003, "资产总计", 1_300_000],   # 130 万
+            [20202004, "负债合计", 700_000],     # 70 万
+            [20202005, "所有者权益", 500_000],   # 50 万 → 70+50 ≠ 130 不平衡
+        ]
+        rows_pre = common_head + [
+            [20202001, "各项存款", 400_000],
+            [20202002, "各项贷款", 1_000_000],
+            [20202003, "资产总计", 1_200_000],
+            [20202004, "负债合计", 700_000],
+            [20202005, "所有者权益", 500_000],
+        ]
+        for path, rows in (
+            (cur_dir / "91440000AA#2026-06-30#01#20202#甲银行.xlsx", rows_cur),
+            (pre_dir / "91440000AA#2026-03-31#01#20202#甲银行.xlsx", rows_pre),
+        ):
+            book = Workbook()
+            sheet = book.active
+            sheet.title = "20202"
+            sheet.append(["t", "", ""])
+            sheet.append([None, None, None])
+            sheet.append(["指标编号", "指标名称", "本期情况"])
+            for row in rows:
+                sheet.append(row)
+            book.save(path)
+        return (
+            pc.load_period_directory(cur_dir, label="当期"),
+            pc.load_period_directory(pre_dir, label="上期"),
+        )
+
+    def test_header_driven_loading_with_warnings(self):
+        config = self.config
+        # 表头名驱动：禁用列在最前也能正确读取
+        self.assertIn("20202001", config.indicators)
+        self.assertEqual(config.indicators["20202001"].central_name, "各项存款")
+        self.assertEqual(config.orgs["甲银行"].region, "惠州")
+        self.assertEqual(len(config.alerts), 2)
+        # R005 未知类型跳过、R006 非法级别回落、R007 语法错误、R008 未知名称、重名指标
+        self.assertFalse(any(r.rule_id == "R005" for r in config.rules))
+        self.assertEqual(next(r for r in config.rules if r.rule_id == "R006").level, "提示")
+        warnings = "\n".join(config.warnings)
+        self.assertIn("未知类型", warnings)
+        self.assertIn("级别", warnings)
+        self.assertIn("语法错误", warnings)
+        self.assertIn("不存在的指标", warnings)
+        self.assertIn("重复", warnings)
+        # 禁用规则保留在配置里但启用规则不含它
+        self.assertTrue(next(r for r in config.rules if r.rule_id == "R004").disabled)
+        self.assertEqual(len([r for r in config.effective_rules() if not r.disabled]), 6)
+
+    def test_rules_hit_with_short_name_and_lowercase_or(self):
+        config = self.config
+        cur, pre = self._prepare_periods()
+        rows = pc.compare_periods(cur, pre, config)
+        pc.apply_special_rules(rows, cur, pre, config)
+        pc.apply_complex_rules(rows, cur, pre, config, on_step=lambda _s: None)
+        by_code = {row["指标编码"]: row for row in rows}
+        # 累计不降（代码清单）：贷款下降命中，级别=提示
+        self.assertEqual(by_code["20202002"]["是否说明"], "当年累计指标比上期不应减少。")
+        self.assertEqual(by_code["20202002"]["级别"], "提示")
+        # 名称引用 + 小写 or() 的表达式命中，级别=核实
+        self.assertEqual(by_code["20202001"]["是否说明"], "贷款大于存款")
+        self.assertEqual(by_code["20202001"]["级别"], "核实")
+        # 资产负债不平衡：名称引用表达式命中所有涉及指标行，级别=错误，计算过程带规则编号
+        for code in ("20202003", "20202004", "20202005"):
+            self.assertEqual(by_code[code]["是否说明"], "资产负债表不平衡")
+            self.assertEqual(by_code[code]["级别"], "错误")
+            self.assertIn("R002", by_code[code]["计算过程"])
+
+    def test_v2_accumulation_skips_cross_year(self):
+        config = self.config
+        d1 = self.tmp / "v2x_cur"
+        d2 = self.tmp / "v2x_pre"
+        d1.mkdir()
+        d2.mkdir()
+        for path, value in (
+            (d1 / "91440000AA#2026-06-30#01#20202#甲银行.xlsx", 100.0),
+            (d2 / "91440000AA#2025-12-31#01#20202#甲银行.xlsx", 500.0),
+        ):
+            book = Workbook()
+            sheet = book.active
+            sheet.title = "20202"
+            sheet.append(["t", "", ""])
+            sheet.append([None, None, None])
+            sheet.append(["指标编号", "指标名称", "本期情况"])
+            sheet.append([20201001, "金融机构名称", "甲银行"])
+            sheet.append([20201002, "金融机构代码", "91440000AA"])
+            sheet.append([20202002, "各项贷款", value])
+            book.save(path)
+        cur = pc.load_period_directory(d1, label="当期")
+        pre = pc.load_period_directory(d2, label="上期")
+        rows = pc.compare_periods(cur, pre, config)
+        pc.apply_special_rules(rows, cur, pre, config)
+        row = next(r for r in rows if r["指标编码"] == "20202002")
+        self.assertEqual(row["是否说明"], "")
+        self.assertIn("跨年累计不比较", row["计算过程"])
+
+    def test_central_tolerance_configurable(self):
+        cur, _pre = self._prepare_periods()
+        central_path = self.tmp / "central.xlsx"
+        _make_central(central_path, value_yi=0.005005)   # 50.05 万元，基础 50 万元 → 差 500 元
+        rows = pc.compare_central(cur, central_path, self.config)
+        deposit = next(r for r in rows if r["指标编码"] == "20202001")
+        self.assertEqual(deposit["是否说明"], "差异超过100元")
+        # 容差放宽到 0.1 万元（1000 元）后不再标记
+        rows = pc.compare_central(cur, central_path, self.config, tolerance=0.1)
+        deposit = next(r for r in rows if r["指标编码"] == "20202001")
+        self.assertEqual(deposit["是否说明"], "")
+
+    def test_run_accepts_tolerance_and_outputs_level_column(self):
+        cur_dir, pre_dir = self._prepare_periods()
+        out_dir = self.tmp / "v2_out"
+        output = pc.run_period_compare(
+            current_dir=cur_dir,
+            previous_dir=pre_dir,
+            central_path=None,
+            output_dir=out_dir,
+            config_path=self.config_path,
+            central_tolerance_yuan=1000.0,
+        )
+        self.assertTrue(output.is_file())
+        book = load_workbook(output, read_only=True)
+        try:
+            headers = [cell.value for cell in next(book["跨期比较"].iter_rows(max_row=1))]
+            self.assertEqual(headers, pc.PERIOD_SHEET_HEADERS)
+            self.assertIn("级别", headers)
+        finally:
+            book.close()
+
+
 class PeriodCompareTests(unittest.TestCase):
     def setUp(self):
         import tempfile
@@ -265,9 +456,9 @@ class PeriodCompareTests(unittest.TestCase):
         self.assertTrue(output.is_file())
         book = load_workbook(output, read_only=True)
         try:
-            self.assertIn("跨期比较", book.sheetnames)
-            self.assertIn("大集中比较", book.sheetnames)
-            headers = [cell.value for cell in next(book["跨期比较"].iter_rows(max_row=1))]
+            self.assertIn("两期对比", book.sheetnames)
+            self.assertIn("大集中对比", book.sheetnames)
+            headers = [cell.value for cell in next(book["两期对比"].iter_rows(max_row=1))]
             self.assertEqual(headers, pc.PERIOD_SHEET_HEADERS)
         finally:
             book.close()

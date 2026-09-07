@@ -68,8 +68,10 @@ class UserSettings:
     period_central_file: str = ""
     period_output_dir: str = ""
     period_output_auto: bool = True
-    # 报表采集系统：跨期比较配置.xlsx 的绑定路径（空 = 使用程序目录内置配置）。
+    # 报表采集系统：报表采集系统_比较配置.xlsx 的绑定路径（空 = 使用程序目录内置配置）。
     period_config_file: str = ""
+    # 大集中核对差异容差（元，默认 100 元 = 0.01 万元），设置中心可调。
+    central_diff_tolerance_yuan: float = 100.0
 
 
 class SettingsStore:
@@ -136,7 +138,19 @@ class SettingsStore:
             period_output_dir=str(payload.get("period_output_dir") or ""),
             period_output_auto=bool(payload.get("period_output_auto", True)),
             period_config_file=str(payload.get("period_config_file") or ""),
+            central_diff_tolerance_yuan=self._tolerance(payload.get("central_diff_tolerance_yuan")),
         )
+
+    @staticmethod
+    def _tolerance(value: object) -> float:
+        """大集中核对容差（元）：非法或越界回落到默认 100 元。"""
+        try:
+            tolerance = float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 100.0
+        if tolerance < 0 or tolerance > 1_000_000:
+            return 100.0
+        return tolerance
 
     def save(self, settings: UserSettings) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

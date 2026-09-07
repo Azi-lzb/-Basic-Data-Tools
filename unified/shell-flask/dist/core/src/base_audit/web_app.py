@@ -79,9 +79,10 @@ class WebApi:
             "pcCurDir": self.settings.period_current_dir,
             "pcPreDir": self.settings.period_previous_dir,
             "pcCentral": self.settings.period_central_file,
-            "pcConfig": self.settings.period_config_file or str(project_root / "跨期比较配置.xlsx"),
+            "pcConfig": self.settings.period_config_file or str(project_root / "报表采集系统_比较配置.xlsx"),
             "pcOutput": self.settings.period_output_dir,
             "pcOutputAuto": self.settings.period_output_auto,
+            "centralTolerance": self.settings.central_diff_tolerance_yuan,
             "periodPairs": [],
         }
         # This also performs the one-time non-destructive filename migration.
@@ -412,7 +413,7 @@ class WebApi:
         return value
 
     def choose_history_config(self) -> str:
-        """选择历史审核配置.xlsx 文件并记住路径（历史数据由人工维护）。"""
+        """选择逐笔统计系统_历史审核配置.xlsx 并记住路径（历史数据由人工维护）。"""
         import webview
         if self.state["busy"]:
             return str(self.history_path)
@@ -608,7 +609,7 @@ class WebApi:
             "pcCurDir": "选择当期（本期）数据目录",
             "pcPreDir": "选择上期数据目录",
             "pcCentral": "选择大集中数据文件",
-            "pcConfig": "选择跨期比较配置.xlsx",
+            "pcConfig": "选择报表采集系统_比较配置.xlsx",
             "pcOutput": "选择输出目录",
         }
         current = self.state.get(kind) or self.state.get("input") or str(self.project_root)
@@ -679,7 +680,7 @@ class WebApi:
         )
 
         started = time.monotonic()
-        config_path = Path(self.state.get("pcConfig") or self.project_root / "跨期比较配置.xlsx")
+        config_path = Path(self.state.get("pcConfig") or self.project_root / "报表采集系统_比较配置.xlsx")
         try:
             if ensure_default_config(config_path):
                 self._log(f"首次使用：已生成默认配置模板 {config_path.name}，可按需维护指标/机构/警戒区间")
@@ -689,6 +690,7 @@ class WebApi:
                 central_path=central_path,
                 output_dir=output_dir,
                 config_path=config_path,
+                central_tolerance_yuan=self.state.get("centralTolerance"),
                 on_step=self._log_detail,
             )
             self.state["status"] = "跨期比较完成"
@@ -767,6 +769,18 @@ class WebApi:
                 self._log("计算引擎只能选择：" + "、".join(sorted(valid_engine_values())))
             else:
                 self.state["calculationEngine"] = candidate
+                self._save_settings()
+        if "centralTolerance" in values:
+            raw = values["centralTolerance"]
+            try:
+                tolerance = round(float(raw), 2)
+            except (TypeError, ValueError):
+                tolerance = 100.0
+            if tolerance < 0 or tolerance > 1_000_000:
+                self._log("大集中核对容差需在 0~1000000 元之间，已恢复默认 100 元")
+                tolerance = 100.0
+            if tolerance != self.state.get("centralTolerance"):
+                self.state["centralTolerance"] = tolerance
                 self._save_settings()
         return self.state
 
@@ -963,6 +977,7 @@ class WebApi:
         self.settings.period_config_file = str(self.state.get("pcConfig") or "")
         self.settings.period_output_dir = str(self.state.get("pcOutput") or "")
         self.settings.period_output_auto = bool(self.state.get("pcOutputAuto", True))
+        self.settings.central_diff_tolerance_yuan = float(self.state.get("centralTolerance") or 100.0)
         self.settings_store.save(self.settings)
 
 

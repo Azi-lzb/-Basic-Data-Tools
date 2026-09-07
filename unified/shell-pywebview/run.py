@@ -18,7 +18,7 @@ ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) el
 CORE = ROOT / "core"
 if not (CORE / "src" / "base_audit").is_dir():
     CORE = ROOT.parent / "core"
-HISTORY_WORKBOOK = CORE / "历史审核配置.xlsx"
+HISTORY_WORKBOOK = CORE / "逐笔统计系统_历史审核配置.xlsx"
 SRC = CORE / "src"
 if not getattr(sys, "frozen", False) and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))

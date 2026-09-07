@@ -575,7 +575,7 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
         </div>
         <div class="input-group">
           <div class="path-name empty" id="historyConfigName">未选择</div>
-          <button class="btn" onclick="pickHistoryConfig()" title="选择历史审核配置.xlsx">选择</button>
+          <button class="btn" onclick="pickHistoryConfig()" title="选择逐笔统计系统_历史审核配置.xlsx">选择</button>
         </div>
       </div>
       <div class="field" id="field-template">
@@ -676,12 +676,19 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
           <p class="collect-tip">大集中数据工作簿；不选则跳过与大集中核对。</p>
         </div>
         <div class="field">
+          <div class="field-head"><label>核对容差（元）</label></div>
+          <div class="input-group">
+            <input type="number" min="0" step="1" id="centralTolerance" style="max-width:140px" onchange="setCentralTolerance(this.value)" title="基础数据值与大集中值差异绝对值超过该容差时，在“是否说明”列标记；默认 100 元（0.01 万元）" />
+          </div>
+          <p class="collect-tip">大集中核对差异超过该数值时标记需说明；默认 100 元。</p>
+        </div>
+        <div class="field">
           <div class="field-head"><label>跨期比较配置</label></div>
           <div class="input-group">
             <div class="path-name link" id="pcConfigName" onclick="openPcPath('pcConfig')" title="">未选择</div>
-            <button class="btn" onclick="pickPc('pcConfig')" title="绑定跨期比较配置.xlsx（指标、机构与警戒区间）；默认使用程序目录内置配置">选择</button>
+            <button class="btn" onclick="pickPc('pcConfig')" title="绑定报表采集系统_比较配置.xlsx（指标、机构、警戒区间与校验规则）；默认使用程序目录内置配置">选择</button>
           </div>
-          <p class="collect-tip">默认使用程序目录的“跨期比较配置.xlsx”；绑定后以所选文件为准。</p>
+          <p class="collect-tip">默认使用程序目录的“报表采集系统_比较配置.xlsx”；绑定后以所选文件为准。</p>
         </div>
         <div class="field" style="margin-bottom:0">
           <div class="field-head"><label>输出目录</label></div>
@@ -695,17 +702,16 @@ table.editor-table{width:100%;border-collapse:collapse;font-size:12.5px}
       <div class="card collect-card">
         <div class="field-head"><label>执行</label></div>
         <div class="actions" style="margin-top:2px">
-          <button class="btn primary" data-action="periodCompare" onclick="runPeriodCompare()" title="本期与上期逐指标比较，选了集中系统数据时一并核对">跨期比较</button>
-          <button class="btn" onclick="openLastPeriodOutput()" title="打开当前输出目录">打开输出目录</button>
+          <button class="btn primary" data-action="periodCompare" onclick="runPeriodCompare()" title="本期与上期逐指标比较，选了集中系统数据时一并核对">执行比较</button>
         </div>
         <p class="collect-tip">输出到本页设置的“输出目录”；原始文件不会被修改。</p>
       </div>
     </div>
     <div class="card collect-card">
       <h2>说明</h2>
-      <p>· 结果生成“跨期比较_时间戳.xlsx”，含“跨期比较”和“大集中比较”两张表；指标、机构与警戒区间在本页绑定的“跨期比较配置.xlsx”中维护（默认使用程序目录内置配置，可点击绑定其他文件）。</p>
-      <p>· “跨期比较”表：当期数/上期数（万元）、变动绝对值、环比变动、警戒区间备注、特殊指标提示、复杂校验勾稽关系。</p>
-      <p>· “大集中比较”表：与大集中（集中系统）数据逐指标核对，差异超过 100 元的行在“是否说明”列标记。</p>
+      <p>· 结果生成“报表采集系统_比较结果_时间戳.xlsx”，含“两期对比”和“大集中对比”两张表；指标、机构、警戒区间与校验规则在本页绑定的“报表采集系统_比较配置.xlsx”中维护（默认使用程序目录内置配置，可点击绑定其他文件）。</p>
+      <p>· “跨期比较”表：当期数/上期数（万元）、变动绝对值、环比变动、警戒区间备注；配置簿“校验规则”表命中的行写“是否说明”和“级别”（错误=勾稽不平衡等必须整改，核实=监管线与占比阈值，提示=趋势提醒）。</p>
+      <p>· “大集中对比”表：与大集中（集中系统）数据逐指标核对，差异超过核对容差（默认 100 元，本页可调）的行在“是否说明”列标记。</p>
     </div>
   </div>
 </section><!-- /page-collect -->
@@ -1033,11 +1039,6 @@ function applySwitchPage(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+page));
   if(page==='settings'&&!CFG.data){loadSettingsData()}
   if(page==='audit'){refresh()}
-}
-function openLastPeriodOutput(){
-  const dir=(state&&state.pcOutput)?state.pcOutput:((state&&state.pcCurDir)?state.pcCurDir.replace(/[\\/]$/,'')+'\\执行结果':'');
-  if(!dir){alert('尚未选择输出目录');return}
-  bridge.api.open_path(dir);
 }
 async function loadSettingsData(){
   CFG.data=null;CFG.dirty=false;CFG.saving=false;
@@ -1903,6 +1904,10 @@ function renderCollect(state){
     el.classList.toggle('link',!!v);
     el.title=v?'点击打开：'+v:'';
   }
+  const tol=document.getElementById('centralTolerance');
+  if(tol&&document.activeElement!==tol){
+    tol.value=(state.centralTolerance==null||state.centralTolerance==='')?100:state.centralTolerance;
+  }
   renderPairList(state.periodPairs||[]);
 }
 /* 配对清单里的工作簿名精简：去掉代码/导出方式前缀段 */
@@ -1957,6 +1962,13 @@ async function pickPc(key){
   }catch(e){
     alert('选择失败：'+((e&&e.message)?e.message:String(e)));
   }
+  await refresh();
+}
+async function setCentralTolerance(value){
+  if(state&&state.busy)return;
+  const num=parseFloat(value);
+  const tolerance=isNaN(num)||num<0?100:Math.round(num*100)/100;
+  try{await bridge.api.update({centralTolerance:tolerance})}catch(e){}
   await refresh();
 }
 function runPeriodCompare(){

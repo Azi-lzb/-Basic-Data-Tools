@@ -890,8 +890,9 @@ def matches_named_range(mapping: FeatureMapping, candidate: str) -> bool:
 # 让 service/excel_com 不必知道存储介质已改变。
 
 WORKFLOW_CONFIG_NAME = "流程配置.json"
-HISTORY_WORKBOOK_NAME = "历史审核配置.xlsx"
-LEGACY_HISTORY_WORKBOOK_NAME = "历史审核说明.xlsx"
+HISTORY_WORKBOOK_NAME = "逐笔统计系统_历史审核配置.xlsx"
+# 历史名称（按代际）：改由 initialize_config 自动迁移到当前名称。
+LEGACY_HISTORY_WORKBOOK_NAMES = ("历史审核配置.xlsx", "历史审核说明.xlsx")
 WORKFLOW_CONFIG_VERSION = 1
 DEFAULT_COMBINE_SHEETS_PLAN = {
     "id": "default",
@@ -1099,9 +1100,8 @@ def initialize_config(config_path: Path) -> Path:
         # 旧版曾把历史存成 data/下的 config.xlsx，或根目录的「历史审核说明.xlsx」。
         # 统一迁移到根目录的「历史审核配置.xlsx」，保留所有人工填写内容。
         candidates = (
-            history_path.parent / "data" / HISTORY_WORKBOOK_NAME,
-            history_path.parent / "data" / LEGACY_HISTORY_WORKBOOK_NAME,
-            history_path.parent / LEGACY_HISTORY_WORKBOOK_NAME,
+            *[history_path.parent / "data" / name for name in LEGACY_HISTORY_WORKBOOK_NAMES],
+            *[history_path.parent / name for name in LEGACY_HISTORY_WORKBOOK_NAMES],
             history_path.parent / "data" / "config.xlsx",
             history_path.with_name("config.xlsx"),
         )
