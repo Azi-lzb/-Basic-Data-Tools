@@ -1492,8 +1492,9 @@ def run_period_compare(
             tolerance = max(float(central_tolerance_yuan), 0.0) / 10000.0
         except (TypeError, ValueError):
             step(f"配置提醒：大集中核对容差“{central_tolerance_yuan}”无效，按默认 100 元处理")
-    current = load_period_directory(current_dir, label="当期", on_step=step)
-    previous = load_period_directory(previous_dir, label="上期", on_step=step)
+    # 目录路径或已加载的指标字典（便于调用方复用加载结果）均可。
+    current = current_dir if isinstance(current_dir, dict) else load_period_directory(current_dir, label="当期", on_step=step)
+    previous = previous_dir if isinstance(previous_dir, dict) else load_period_directory(previous_dir, label="上期", on_step=step)
     step(f"当期指标值 {len(current)} 条，上期指标值 {len(previous)} 条")
     period_rows = compare_periods(current, previous, config)
     step(f"两期比较完成：{len(period_rows)} 行")

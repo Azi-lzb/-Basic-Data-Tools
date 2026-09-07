@@ -240,7 +240,7 @@ class PeriodCompareV2ConfigTests(unittest.TestCase):
         self.assertTrue(output.is_file())
         book = load_workbook(output, read_only=True)
         try:
-            headers = [cell.value for cell in next(book["跨期比较"].iter_rows(max_row=1))]
+            headers = [cell.value for cell in next(book["两期对比"].iter_rows(max_row=1))]
             self.assertEqual(headers, pc.PERIOD_SHEET_HEADERS)
             self.assertIn("级别", headers)
         finally:

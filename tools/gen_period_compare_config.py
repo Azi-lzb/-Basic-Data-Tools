@@ -1,11 +1,11 @@
-"""把旧版（5 表）跨期比较配置.xlsx 升级为新版（4 表）格式。
+"""把旧版（5 表）比较配置工作簿升级为新版（4 表）格式。
 
 用法：
     python tools/gen_period_compare_config.py [旧配置簿] [输出路径]
 
 默认：
-    源 unified/core/跨期比较配置.xlsx（旧 5 表格式）
-    目标 unified/core/跨期比较配置.xlsx（就地覆盖；文件被 Excel 占用时另指定路径）
+    源 unified/core/报表采集系统_比较配置.xlsx（缺省回退旧名 跨期比较配置.xlsx）
+    目标 unified/core/报表采集系统_比较配置.xlsx（就地覆盖；文件被 Excel 占用时另指定路径）
 
 转换规则：
 - 指标参照：删除程序不读的“表单/频度”列，“核对要求”并入“备注”；
@@ -47,7 +47,8 @@ from base_audit.period_compare import (  # noqa: E402
     load_period_config,
 )
 
-DEFAULT_SOURCE = ROOT / "unified" / "core" / "跨期比较配置.xlsx"
+DEFAULT_SOURCE = ROOT / "unified" / "core" / "报表采集系统_比较配置.xlsx"
+LEGACY_SOURCE = ROOT / "unified" / "core" / "跨期比较配置.xlsx"
 DEFAULT_TARGET = DEFAULT_SOURCE
 
 def _level_for(desc: str) -> str:
@@ -97,10 +98,15 @@ def _shorten_expression(expression: str) -> str:
 
 
 def main() -> int:
-    source = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SOURCE
+    source = Path(sys.argv[1]) if len(sys.argv) > 1 else (
+        DEFAULT_SOURCE if DEFAULT_SOURCE.is_file() else LEGACY_SOURCE
+    )
     target = Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_TARGET
     book = load_workbook(source, read_only=True, data_only=True)
     try:
+        if CONFIG_RULE_SHEET in book.sheetnames:
+            print(f"源文件已是新版 4 表格式，无需迁移：{source}")
+            return 0
         problems: list[str] = []
 
         # ---- 指标参照（旧列序：代码/名称/属性/不转换/核对/大集中名/禁用/表单/频度/核对要求） ----

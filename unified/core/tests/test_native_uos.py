@@ -382,6 +382,36 @@ def test_state_has_default_period_config(tmp_path: Path) -> None:
     assert api.state["pcConfig"] == str(tmp_path / "报表采集系统_比较配置.xlsx")
 
 
+def test_central_tolerance_default_and_round_trip(tmp_path: Path) -> None:
+    from base_audit.web_app import WebApi
+
+    api = WebApi(tmp_path)
+    assert api.state["centralTolerance"] == 100.0
+    assert api.settings.central_diff_tolerance_yuan == 100.0
+    # 页面推送新容差 → 状态与设置持久化；重载后仍保留
+    api.update({"centralTolerance": 250})
+    assert api.state["centralTolerance"] == 250.0
+    reloaded = WebApi(tmp_path)
+    assert reloaded.state["centralTolerance"] == 250.0
+
+
+def test_central_tolerance_invalid_falls_back_to_default(tmp_path: Path) -> None:
+    from base_audit.settings import SettingsStore
+    from base_audit.web_app import WebApi
+
+    api = WebApi(tmp_path)
+    api.update({"centralTolerance": "abc"})
+    assert api.state["centralTolerance"] == 100.0
+    api.update({"centralTolerance": -5})
+    assert api.state["centralTolerance"] == 100.0
+    # 设置文件中的非法/越界值在加载时同样回落默认 100
+    store = tmp_path / "用户设置.json"
+    store.write_text('{"central_diff_tolerance_yuan": "abc"}', encoding="utf-8")
+    assert SettingsStore(store).load().central_diff_tolerance_yuan == 100.0
+    store.write_text('{"central_diff_tolerance_yuan": 99999999}', encoding="utf-8")
+    assert SettingsStore(store).load().central_diff_tolerance_yuan == 100.0
+
+
 # ---------------------------------------------------------------------------
 # 配置文件改名迁移（历史：→逐笔统计系统_历史审核配置；比较：→报表采集系统_比较配置）
 # ---------------------------------------------------------------------------

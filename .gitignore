@@ -29,6 +29,9 @@ Thumbs.db
 .vscode/
 .claude/
 
+# Office 锁文件（Excel 打开工作簿时的 ~$ 临时文件）
+~$*
+
 # ZCode 会话目录
 .zcode/
 
